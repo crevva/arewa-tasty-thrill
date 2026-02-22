@@ -29,3 +29,7 @@ yarn-error.log*
 # misc
 .DS_Store
 *.tsbuildinfo
+.vercel
+.npm-cache/
+.tmp/
+supabase/.temp/
