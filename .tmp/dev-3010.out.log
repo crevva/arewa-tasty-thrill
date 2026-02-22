@@ -1,0 +1,28 @@
+
+> at-thrill-app@0.1.0 dev
+> next dev -p 3010
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3010
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 8.7s
+ ○ Compiling /api/checkout/order ...
+ ✓ Compiled /api/checkout/order in 12.4s (672 modules)
+ POST /api/checkout/order 200 in 19277ms
+ ○ Compiling /api/payments/[provider]/checkout ...
+ ✓ Compiled /api/payments/[provider]/checkout in 3.6s (875 modules)
+ POST /api/payments/paystack/checkout 200 in 6929ms
+ ○ Compiling /api/webhooks/[provider] ...
+ ✓ Compiled /api/webhooks/[provider] in 680ms (877 modules)
+ POST /api/webhooks/paystack 200 in 3390ms
+ POST /api/webhooks/paystack 200 in 131ms
+ ○ Compiling /api/orders/lookup ...
+ ✓ Compiled /api/orders/lookup in 960ms (630 modules)
+ POST /api/orders/lookup 200 in 2337ms
+ POST /api/orders/lookup 500 in 94ms
+ ✓ Compiled in 671ms (424 modules)
+ POST /api/orders/lookup 400 in 299ms
+ POST /api/orders/lookup 200 in 111ms
+[?25h
