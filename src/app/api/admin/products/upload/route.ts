@@ -1,12 +1,15 @@
 import { getDb } from "@/lib/db";
 import { getStorageProvider } from "@/storage";
-import { requireAdminSession } from "@/lib/security/admin";
+import {
+  isBackofficeAccessError,
+  requireBackofficeSession
+} from "@/lib/security/admin";
 import { badRequest, forbidden, internalError, ok } from "@/lib/utils/http";
 import { writeAuditLog } from "@/server/admin/audit";
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdminSession();
+    const admin = await requireBackofficeSession("admin");
     const formData = await request.formData();
     const file = formData.get("file");
     const productId = formData.get("productId");
@@ -49,7 +52,7 @@ export async function POST(request: Request) {
 
     return ok({ storagePath: uploaded.storagePath, publicUrl: uploaded.publicUrl });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);

@@ -1,11 +1,14 @@
 import { getDb } from "@/lib/db";
-import { requireAdminSession } from "@/lib/security/admin";
+import {
+  isBackofficeAccessError,
+  requireBackofficeSession
+} from "@/lib/security/admin";
 import { badRequest, forbidden, internalError, ok } from "@/lib/utils/http";
 import { writeAuditLog } from "@/server/admin/audit";
 
 export async function GET() {
   try {
-    await requireAdminSession();
+    await requireBackofficeSession("staff");
     const orders = await getDb()
       .selectFrom("orders")
       .leftJoin("delivery_zones", "delivery_zones.id", "orders.delivery_zone_id")
@@ -25,7 +28,7 @@ export async function GET() {
 
     return ok({ orders });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);
@@ -34,7 +37,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const admin = await requireAdminSession();
+    const admin = await requireBackofficeSession("staff");
     const payload = (await request.json()) as { id?: string; status?: string };
 
     if (!payload.id || !payload.status) {
@@ -58,7 +61,7 @@ export async function PUT(request: Request) {
 
     return ok({ order });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);

@@ -1,16 +1,19 @@
 import { getDb } from "@/lib/db";
-import { requireAdminSession } from "@/lib/security/admin";
+import {
+  isBackofficeAccessError,
+  requireBackofficeSession
+} from "@/lib/security/admin";
 import { categorySchema } from "@/lib/validators/admin";
 import { badRequest, forbidden, internalError, ok } from "@/lib/utils/http";
 import { writeAuditLog } from "@/server/admin/audit";
 
 export async function GET() {
   try {
-    await requireAdminSession();
+    await requireBackofficeSession("admin");
     const categories = await getDb().selectFrom("categories").selectAll().orderBy("name asc").execute();
     return ok({ categories });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);
@@ -19,7 +22,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const admin = await requireAdminSession();
+    const admin = await requireBackofficeSession("admin");
     const payload = await request.json();
     const parsed = categorySchema.safeParse(payload);
     if (!parsed.success) {
@@ -41,7 +44,7 @@ export async function POST(request: Request) {
 
     return ok({ category });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);
@@ -50,7 +53,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const admin = await requireAdminSession();
+    const admin = await requireBackofficeSession("admin");
     const payload = (await request.json()) as { id?: string } & Record<string, unknown>;
     if (!payload.id) {
       return badRequest("id is required");
@@ -77,7 +80,7 @@ export async function PUT(request: Request) {
 
     return ok({ category });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);
@@ -86,7 +89,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const admin = await requireAdminSession();
+    const admin = await requireBackofficeSession("admin");
     const payload = (await request.json()) as { id?: string };
     if (!payload.id) {
       return badRequest("id is required");
@@ -103,7 +106,7 @@ export async function DELETE(request: Request) {
 
     return ok({ ok: true });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);

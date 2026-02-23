@@ -1,16 +1,19 @@
 import { getDb } from "@/lib/db";
-import { requireAdminSession } from "@/lib/security/admin";
+import {
+  isBackofficeAccessError,
+  requireBackofficeSession
+} from "@/lib/security/admin";
 import { cmsPageSchema } from "@/lib/validators/admin";
 import { badRequest, forbidden, internalError, ok } from "@/lib/utils/http";
 import { writeAuditLog } from "@/server/admin/audit";
 
 export async function GET() {
   try {
-    await requireAdminSession();
+    await requireBackofficeSession("admin");
     const pages = await getDb().selectFrom("cms_pages").selectAll().orderBy("slug asc").execute();
     return ok({ pages });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);
@@ -19,7 +22,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const admin = await requireAdminSession();
+    const admin = await requireBackofficeSession("admin");
     const payload = await request.json();
     const parsed = cmsPageSchema.safeParse(payload);
 
@@ -56,7 +59,7 @@ export async function PUT(request: Request) {
 
     return ok({ page });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);

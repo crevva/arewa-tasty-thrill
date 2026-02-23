@@ -1,19 +1,25 @@
 import Link from "next/link";
 
-const links = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/products", label: "Products" },
-  { href: "/admin/categories", label: "Categories" },
-  { href: "/admin/orders", label: "Orders" },
-  { href: "/admin/delivery-zones", label: "Delivery Zones" },
-  { href: "/admin/events", label: "Event Requests" },
-  { href: "/admin/cms", label: "CMS Pages" }
+import { hasRequiredBackofficeRole } from "@/lib/security/admin";
+import type { BackofficeRole } from "@/server/backoffice/types";
+
+const links: Array<{ href: string; label: string; minRole: BackofficeRole }> = [
+  { href: "/admin", label: "Dashboard", minRole: "staff" },
+  { href: "/admin/orders", label: "Orders", minRole: "staff" },
+  { href: "/admin/events", label: "Event Requests", minRole: "staff" },
+  { href: "/admin/products", label: "Products", minRole: "admin" },
+  { href: "/admin/categories", label: "Categories", minRole: "admin" },
+  { href: "/admin/delivery-zones", label: "Delivery Zones", minRole: "admin" },
+  { href: "/admin/cms", label: "CMS Pages", minRole: "admin" },
+  { href: "/admin/backoffice", label: "Backoffice", minRole: "superadmin" }
 ];
 
-export function AdminNav() {
+export function AdminNav({ role }: { role: BackofficeRole }) {
+  const visibleLinks = links.filter((link) => hasRequiredBackofficeRole(role, link.minRole));
+
   return (
     <nav className="space-y-1" aria-label="Admin navigation">
-      {links.map((link) => (
+      {visibleLinks.map((link) => (
         <Link
           key={link.href}
           href={link.href}

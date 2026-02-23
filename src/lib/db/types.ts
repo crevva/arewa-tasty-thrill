@@ -161,6 +161,30 @@ export type RateLimitBucketsTable = {
   updated_at: Generated<Date>;
 };
 
+export type BackofficeUsersTable = {
+  id: Generated<string>;
+  user_profile_id: string;
+  role: "superadmin" | "admin" | "staff";
+  status: "active" | "suspended";
+  created_by_user_profile_id: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+};
+
+export type BackofficeInvitesTable = {
+  id: Generated<string>;
+  email: string;
+  role: "admin" | "staff";
+  token_hash: string;
+  status: "pending" | "accepted" | "revoked" | "expired";
+  expires_at: Date;
+  invited_by_user_profile_id: string;
+  accepted_user_profile_id: string | null;
+  accepted_at: Date | null;
+  revoked_at: Date | null;
+  created_at: Generated<Date>;
+};
+
 export type Database = {
   users_profile: UsersProfileTable;
   auth_identities: AuthIdentitiesTable;
@@ -178,6 +202,8 @@ export type Database = {
   admin_audit_log: AdminAuditLogTable;
   cms_pages: CmsPagesTable;
   rate_limit_buckets: RateLimitBucketsTable;
+  backoffice_users: BackofficeUsersTable;
+  backoffice_invites: BackofficeInvitesTable;
 };
 
 export type Row<T extends keyof Database> = Selectable<Database[T]>;

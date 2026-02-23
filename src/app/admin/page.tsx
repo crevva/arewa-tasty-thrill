@@ -1,7 +1,9 @@
 import { AnalyticsCharts } from "@/components/admin/analytics-charts";
+import { requireBackofficeSession } from "@/lib/security/admin";
 import { loadAnalytics } from "@/server/admin/analytics";
 
 export default async function AdminDashboardPage() {
+  await requireBackofficeSession("staff");
   const analytics = await loadAnalytics();
 
   return (

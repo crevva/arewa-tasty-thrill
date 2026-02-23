@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { hasPendingBackofficeInviteForEmail } from "@/server/backoffice/invites";
 import { registerCredentialsUser } from "@/server/users/register";
 
 export async function POST(request: Request) {
@@ -12,6 +13,14 @@ export async function POST(request: Request) {
 
     if (!body.email || !body.password) {
       return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
+    }
+
+    const hasPendingInvite = await hasPendingBackofficeInviteForEmail(body.email);
+    if (hasPendingInvite) {
+      return NextResponse.json(
+        { error: "This email has a backoffice invite. Use your invitation link." },
+        { status: 403 }
+      );
     }
 
     await registerCredentialsUser({

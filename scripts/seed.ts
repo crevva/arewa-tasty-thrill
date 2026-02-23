@@ -2,6 +2,7 @@ import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
 
 import type { Database } from "../src/lib/db/types";
+import { ensureSeededSuperadmin } from "../src/server/backoffice/bootstrap";
 import { galleryOnlyImages, productImageMap } from "./product-image-map";
 
 type SeedDb = Kysely<Database>;
@@ -285,6 +286,7 @@ async function run() {
     await seedCatalog(db);
     await seedZones(db);
     await seedCms(db);
+    await ensureSeededSuperadmin({ db });
     console.log("Database seed completed.");
   } finally {
     await db.destroy();

@@ -37,3 +37,22 @@ export const cmsPageSchema = z.object({
 export const eventRequestUpdateSchema = z.object({
   status: z.string().min(2)
 });
+
+export const backofficeInviteCreateSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(["admin", "staff"])
+});
+
+export const backofficeInviteRevokeSchema = z.object({
+  id: z.string().uuid()
+});
+
+export const backofficeUserUpdateSchema = z
+  .object({
+    id: z.string().uuid(),
+    role: z.enum(["superadmin", "admin", "staff"]).optional(),
+    status: z.enum(["active", "suspended"]).optional()
+  })
+  .refine((value) => Boolean(value.role || value.status), {
+    message: "role or status is required"
+  });

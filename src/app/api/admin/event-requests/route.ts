@@ -1,12 +1,15 @@
 import { getDb } from "@/lib/db";
-import { requireAdminSession } from "@/lib/security/admin";
+import {
+  isBackofficeAccessError,
+  requireBackofficeSession
+} from "@/lib/security/admin";
 import { eventRequestUpdateSchema } from "@/lib/validators/admin";
 import { badRequest, forbidden, internalError, ok } from "@/lib/utils/http";
 import { writeAuditLog } from "@/server/admin/audit";
 
 export async function GET() {
   try {
-    await requireAdminSession();
+    await requireBackofficeSession("staff");
     const requests = await getDb()
       .selectFrom("event_requests")
       .selectAll()
@@ -14,7 +17,7 @@ export async function GET() {
       .execute();
     return ok({ requests });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);
@@ -23,7 +26,7 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const admin = await requireAdminSession();
+    const admin = await requireBackofficeSession("staff");
     const payload = (await request.json()) as { id?: string; status?: string };
     if (!payload.id) {
       return badRequest("id is required");
@@ -51,7 +54,7 @@ export async function PUT(request: Request) {
 
     return ok({ eventRequest });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Admin access required")) {
+    if (isBackofficeAccessError(error)) {
       return forbidden();
     }
     return internalError(error);

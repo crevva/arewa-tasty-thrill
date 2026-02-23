@@ -16,6 +16,7 @@ const authProvider = process.env.NEXT_PUBLIC_AUTH_PROVIDER;
 function SignInContent() {
   const params = useSearchParams();
   const returnTo = useMemo(() => params.get("returnTo") ?? "/", [params]);
+  const isBackofficeReturn = returnTo.startsWith("/admin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -117,9 +118,11 @@ function SignInContent() {
               "Sign in with Google"
             )}
           </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            New here? <Link href="/auth/register" className="font-semibold text-primary">Create account</Link>
-          </p>
+          {!isBackofficeReturn ? (
+            <p className="text-center text-sm text-muted-foreground">
+              New here? <Link href="/auth/register" className="font-semibold text-primary">Create account</Link>
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </section>

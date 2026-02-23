@@ -18,7 +18,8 @@ Premium ecommerce webapp for **Arewa Tasty Thrill** built with Next.js App Route
 - Secure webhook handling with signature verification + idempotency
 - Order lookup by `order_code + email/phone`
 - Guest order claim flow after sign-in with verified email
-- Admin dashboard with server-side allowlist authz (`ADMIN_EMAILS`)
+- Admin dashboard with server-side role authz (`superadmin`/`admin`/`staff`) plus optional `ADMIN_EMAILS` fallback
+- Role-based backoffice access (`superadmin`, `admin`, `staff`) with invite-only onboarding
 - Products/categories/orders/zones/events/CMS admin modules
 - SEO metadata, sitemap, robots, responsive image-heavy premium UI
 - Light mode default with premium opt-in dark mode toggle
@@ -68,6 +69,14 @@ Required minimum for local app startup:
 - `AUTH_PROVIDER`
 - `ADMIN_EMAILS`
 
+Backoffice bootstrap/invite vars:
+- `SUPERADMIN_EMAIL` (recommended)
+- `SUPERADMIN_INITIAL_PASSWORD` (for NextAuth bootstrap)
+- `SUPERADMIN_NAME` (defaults to `AT Thrill Superadmin`)
+- `BACKOFFICE_INVITE_TTL_HOURS` (default `72`)
+- `ENABLE_ADMIN_EMAILS_FALLBACK` (default `true`)
+- `BACKOFFICE_INVITE_FROM` (optional override for invite sender; falls back to `EMAIL_FROM`)
+
 ## Local Setup (Supabase CLI + SQL migrations)
 1. Start Supabase local services:
 ```bash
@@ -83,6 +92,7 @@ pnpm db:migrate
 ```bash
 pnpm db:seed
 ```
+This also seeds/updates the default superadmin when `SUPERADMIN_EMAIL` is configured.
 5. Run app:
 ```bash
 pnpm dev
@@ -182,6 +192,20 @@ ADMIN_EMAILS=owner@atthrill.ng,ops@atthrill.ng
 ```
 Admin routes are enforced server-side in `/admin` and `/api/admin/*`.
 
+Role model:
+- `superadmin`: full access + backoffice user/invite management
+- `admin`: catalog, zones, CMS, orders/events operations
+- `staff`: orders/events operations
+
+Backoffice onboarding:
+- Backoffice users should be invited by a `superadmin` from `/admin/backoffice`.
+- Invite accept page: `/backoffice/invite/accept?token=...`
+- Invite acceptance currently requires `AUTH_PROVIDER=nextauth`.
+- `/auth/register` remains for customers, but blocks emails with pending backoffice invites.
+
+Compatibility rollout:
+- `ENABLE_ADMIN_EMAILS_FALLBACK=true` keeps legacy `ADMIN_EMAILS` access active while migrating to role records.
+
 ## Production Notes
 - App DB is standard Postgres via `DATABASE_URL` (not tied to Supabase in production).
 - Orders/payments are stored in app DB independent of auth provider DB features.
@@ -193,5 +217,5 @@ Admin routes are enforced server-side in `/admin` and `/api/admin/*`.
 - `order_code + email/phone` lookup works
 - Paid webhook transitions order to `paid` exactly once
 - Switching `AUTH_PROVIDER` does not break purchasing
-- Admin routes reject non-allowlisted users
+- Admin routes enforce role-based access and reject unauthorized users
 - Claim flow links guest orders by verified email
