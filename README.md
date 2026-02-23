@@ -126,15 +126,16 @@ Enable list:
 - `SHOW_PAYPAL_ALWAYS=false` (set `true` to always show PayPal on checkout)
 
 Checkout payment intent contract:
-- Frontend sends `paymentMethod` only: `card | paypal`.
-- `card` is routed server-side to an enabled card gateway (`paystack|flutterwave|stripe`) using `PRIMARY_PAYMENT_PROVIDER` as first preference.
+- Frontend sends `paymentMethod` only: `pay_online | paypal`.
+- `pay_online` is routed server-side to an enabled card gateway (`paystack|flutterwave|stripe`) using `PRIMARY_PAYMENT_PROVIDER` as first preference.
 - `paypal` is routed server-side to PayPal.
+- Backward compatibility: API still accepts legacy `card` and normalizes it to `pay_online`.
 - PayPal option visibility in checkout:
   - shown when quote currency is non-`NGN`, or
   - when `SHOW_PAYPAL_ALWAYS=true`.
 
 Provider secrets:
-- Paystack: `PAYSTACK_SECRET_KEY`, `PAYSTACK_WEBHOOK_SECRET`
+- Paystack: `PAYSTACK_SECRET_KEY`, `PAYSTACK_WEBHOOK_SECRET` (optional client key for inline flows: `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY`)
 - Flutterwave: `FLUTTERWAVE_SECRET_KEY`, `FLUTTERWAVE_WEBHOOK_SECRET`
 - Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - PayPal: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`

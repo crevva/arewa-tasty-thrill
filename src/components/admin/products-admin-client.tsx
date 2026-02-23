@@ -1,10 +1,12 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 
 type Product = {
@@ -59,6 +61,8 @@ export function ProductsAdminClient() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const defaultCategory = categories[0]?.id ?? "";
 
@@ -96,7 +100,9 @@ export function ProductsAdminClient() {
   }
 
   useEffect(() => {
-    load().catch(() => setError("Unable to load products"));
+    load()
+      .catch(() => setError("Unable to load products"))
+      .finally(() => setInitialLoading(false));
   }, []);
 
   useEffect(() => {
@@ -120,6 +126,43 @@ export function ProductsAdminClient() {
 
   const productRows = useMemo(() => products, [products]);
 
+  function isRowBusy(productId: string) {
+    return (
+      busyKey === `save:${productId}` ||
+      busyKey === `upload:${productId}` ||
+      busyKey === `delete:${productId}`
+    );
+  }
+
+  if (initialLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="premium-card grid gap-3 p-4 md:grid-cols-2">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-10 w-full rounded-md" />
+          ))}
+          <Skeleton className="h-10 w-40 rounded-md md:col-span-2" />
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="premium-card space-y-3 p-4">
+              <div className="grid gap-2 md:grid-cols-2">
+                {Array.from({ length: 6 }).map((__, innerIndex) => (
+                  <Skeleton key={innerIndex} className="h-10 w-full rounded-md" />
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Skeleton className="h-10 w-20 rounded-md" />
+                <Skeleton className="h-10 w-28 rounded-md" />
+                <Skeleton className="h-10 w-24 rounded-md" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <form
@@ -127,50 +170,60 @@ export function ProductsAdminClient() {
         onSubmit={async (event) => {
           event.preventDefault();
           setError(null);
+          setBusyKey("create");
 
-          const response = await fetch("/api/admin/products", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...form,
-              base_price: parseNairaToKobo(form.base_price || "0")
-            })
-          });
+          try {
+            const response = await fetch("/api/admin/products", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...form,
+                base_price: parseNairaToKobo(form.base_price || "0")
+              })
+            });
 
-          const payload = (await response.json()) as { error?: string };
-          if (!response.ok) {
-            setError(payload.error ?? "Unable to create product");
-            return;
+            const payload = (await response.json()) as { error?: string };
+            if (!response.ok) {
+              setError(payload.error ?? "Unable to create product");
+              return;
+            }
+
+            setForm({
+              name: "",
+              slug: "",
+              description: "",
+              base_price: DEFAULT_NAIRA_INPUT,
+              active: true,
+              in_stock: true,
+              category_id: defaultCategory
+            });
+            await load();
+          } catch (caught) {
+            setError(caught instanceof Error ? caught.message : "Unable to create product");
+          } finally {
+            setBusyKey(null);
           }
-
-          setForm({
-            name: "",
-            slug: "",
-            description: "",
-            base_price: DEFAULT_NAIRA_INPUT,
-            active: true,
-            in_stock: true,
-            category_id: defaultCategory
-          });
-          await load();
         }}
       >
         <Input
           placeholder="Name"
           value={form.name}
           onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+          disabled={busyKey === "create"}
           required
         />
         <Input
           placeholder="Slug"
           value={form.slug}
           onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
+          disabled={busyKey === "create"}
           required
         />
         <Input
           placeholder="Description"
           value={form.description}
           onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+          disabled={busyKey === "create"}
           required
         />
         <Input
@@ -182,11 +235,13 @@ export function ProductsAdminClient() {
             const sanitized = sanitizeMoneyInput(event.target.value);
             setForm((current) => ({ ...current, base_price: sanitized }));
           }}
+          disabled={busyKey === "create"}
           required
         />
         <Select
           value={form.category_id}
           onChange={(event) => setForm((current) => ({ ...current, category_id: event.target.value }))}
+          disabled={busyKey === "create"}
           required
         >
           {categories.map((category) => (
@@ -201,6 +256,7 @@ export function ProductsAdminClient() {
               checked={form.active}
               onCheckedChange={(checked) => setForm((current) => ({ ...current, active: checked }))}
               aria-label="Toggle active state for new product"
+              disabled={busyKey === "create"}
             />
             <span>Active</span>
           </div>
@@ -211,12 +267,22 @@ export function ProductsAdminClient() {
                 setForm((current) => ({ ...current, in_stock: checked }))
               }
               aria-label="Toggle stock state for new product"
+              disabled={busyKey === "create"}
             />
             <span>In stock</span>
           </div>
         </div>
         <div className="md:col-span-2">
-          <Button type="submit">Create product</Button>
+          <Button type="submit" disabled={busyKey === "create"}>
+            {busyKey === "create" ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Creating...
+              </span>
+            ) : (
+              "Create product"
+            )}
+          </Button>
         </div>
       </form>
 
@@ -228,6 +294,7 @@ export function ProductsAdminClient() {
             <div className="grid gap-2 md:grid-cols-2">
               <Input
                 value={product.name}
+                disabled={isRowBusy(product.id)}
                 onChange={(event) =>
                   setProducts((rows) =>
                     rows.map((row) =>
@@ -238,6 +305,7 @@ export function ProductsAdminClient() {
               />
               <Input
                 value={product.slug}
+                disabled={isRowBusy(product.id)}
                 onChange={(event) =>
                   setProducts((rows) =>
                     rows.map((row) =>
@@ -248,6 +316,7 @@ export function ProductsAdminClient() {
               />
               <Input
                 value={product.description}
+                disabled={isRowBusy(product.id)}
                 onChange={(event) =>
                   setProducts((rows) =>
                     rows.map((row) =>
@@ -260,10 +329,12 @@ export function ProductsAdminClient() {
                 type="text"
                 inputMode="decimal"
                 value={priceDrafts[product.id] ?? formatKoboToNaira(product.base_price)}
+                disabled={isRowBusy(product.id)}
                 onChange={(event) => setProductPriceDraft(product.id, event.target.value)}
               />
               <Select
                 value={product.category_id}
+                disabled={isRowBusy(product.id)}
                 onChange={(event) =>
                   setProducts((rows) =>
                     rows.map((row) =>
@@ -282,6 +353,7 @@ export function ProductsAdminClient() {
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={product.active}
+                    disabled={isRowBusy(product.id)}
                     onCheckedChange={(checked) =>
                       setProducts((rows) =>
                         rows.map((row) =>
@@ -296,6 +368,7 @@ export function ProductsAdminClient() {
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={product.in_stock}
+                    disabled={isRowBusy(product.id)}
                     onCheckedChange={(checked) =>
                       setProducts((rows) =>
                         rows.map((row) =>
@@ -312,31 +385,51 @@ export function ProductsAdminClient() {
 
             <div className="flex flex-wrap gap-2">
               <Button
+                disabled={isRowBusy(product.id)}
                 onClick={async () => {
-                  const response = await fetch("/api/admin/products", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(product)
-                  });
-                  const payload = (await response.json()) as { error?: string };
-                  if (!response.ok) {
-                    setError(payload.error ?? "Unable to update product");
-                    return;
+                  setError(null);
+                  setBusyKey(`save:${product.id}`);
+                  try {
+                    const response = await fetch("/api/admin/products", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(product)
+                    });
+                    const payload = (await response.json()) as { error?: string };
+                    if (!response.ok) {
+                      setError(payload.error ?? "Unable to update product");
+                      return;
+                    }
+                    await load();
+                  } catch (caught) {
+                    setError(caught instanceof Error ? caught.message : "Unable to update product");
+                  } finally {
+                    setBusyKey(null);
                   }
-                  await load();
                 }}
               >
-                Save
+                {busyKey === `save:${product.id}` ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Saving...
+                  </span>
+                ) : (
+                  "Save"
+                )}
               </Button>
               <Button
                 variant="outline"
+                disabled={isRowBusy(product.id)}
                 onClick={async () => {
+                  setError(null);
+                  setBusyKey(`upload:${product.id}`);
                   const fileInput = document.createElement("input");
                   fileInput.type = "file";
                   fileInput.accept = "image/*";
                   fileInput.onchange = async () => {
                     const file = fileInput.files?.[0];
                     if (!file) {
+                      setBusyKey(null);
                       return;
                     }
 
@@ -344,37 +437,66 @@ export function ProductsAdminClient() {
                     data.append("file", file);
                     data.append("productId", product.id);
 
-                    const uploadResponse = await fetch("/api/admin/products/upload", {
-                      method: "POST",
-                      body: data
-                    });
-                    const uploadPayload = (await uploadResponse.json()) as { error?: string };
-                    if (!uploadResponse.ok) {
-                      setError(uploadPayload.error ?? "Unable to upload image");
+                    try {
+                      const uploadResponse = await fetch("/api/admin/products/upload", {
+                        method: "POST",
+                        body: data
+                      });
+                      const uploadPayload = (await uploadResponse.json()) as { error?: string };
+                      if (!uploadResponse.ok) {
+                        setError(uploadPayload.error ?? "Unable to upload image");
+                      }
+                    } catch (caught) {
+                      setError(caught instanceof Error ? caught.message : "Unable to upload image");
+                    } finally {
+                      setBusyKey(null);
                     }
                   };
                   fileInput.click();
                 }}
               >
-                Upload image
+                {busyKey === `upload:${product.id}` ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Uploading...
+                  </span>
+                ) : (
+                  "Upload image"
+                )}
               </Button>
               <Button
                 variant="destructive"
+                disabled={isRowBusy(product.id)}
                 onClick={async () => {
-                  const response = await fetch("/api/admin/products", {
-                    method: "DELETE",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ id: product.id })
-                  });
-                  const payload = (await response.json()) as { error?: string };
-                  if (!response.ok) {
-                    setError(payload.error ?? "Unable to delete product");
-                    return;
+                  setError(null);
+                  setBusyKey(`delete:${product.id}`);
+                  try {
+                    const response = await fetch("/api/admin/products", {
+                      method: "DELETE",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ id: product.id })
+                    });
+                    const payload = (await response.json()) as { error?: string };
+                    if (!response.ok) {
+                      setError(payload.error ?? "Unable to delete product");
+                      return;
+                    }
+                    await load();
+                  } catch (caught) {
+                    setError(caught instanceof Error ? caught.message : "Unable to delete product");
+                  } finally {
+                    setBusyKey(null);
                   }
-                  await load();
                 }}
               >
-                Delete
+                {busyKey === `delete:${product.id}` ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete"
+                )}
               </Button>
             </div>
           </article>

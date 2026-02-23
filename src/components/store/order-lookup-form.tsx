@@ -1,9 +1,11 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils/cn";
 
 function normalizeOrderCodeInput(value: string) {
@@ -106,6 +108,7 @@ export function OrderLookupForm() {
             autoCapitalize="characters"
             spellCheck={false}
             pattern="AT-[A-Z0-9]{8}"
+            disabled={busy}
             required
           />
           <p className="text-xs text-muted-foreground">Use the exact code shown in your order confirmation.</p>
@@ -118,14 +121,35 @@ export function OrderLookupForm() {
             id="emailOrPhone"
             value={emailOrPhone}
             onChange={(event) => setEmailOrPhone(event.target.value)}
+            disabled={busy}
             required
           />
         </div>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <Button className="w-full" type="submit" disabled={busy}>
-          {busy ? "Checking..." : "Lookup order"}
+          {busy ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Checking...
+            </span>
+          ) : (
+            "Lookup order"
+          )}
         </Button>
       </form>
+
+      {busy && !result ? (
+        <div className="premium-card space-y-3 p-6" aria-live="polite" aria-busy="true">
+          <Skeleton className="h-7 w-36" />
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-4 w-32" />
+          <div className="space-y-2 pt-1">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-11/12" />
+            <Skeleton className="h-4 w-4/5" />
+          </div>
+        </div>
+      ) : null}
 
       {result ? (
         <div className="premium-card p-6">

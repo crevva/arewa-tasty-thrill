@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -66,7 +67,7 @@ export function CheckoutForm(props: {
 
   const defaultZoneId = props.zones[0]?.id;
   const defaultPaymentMethod: CheckoutPaymentMethod =
-    props.paymentOptions.cardEnabled || !props.paymentOptions.paypalEnabled ? "card" : "paypal";
+    props.paymentOptions.cardEnabled || !props.paymentOptions.paypalEnabled ? "pay_online" : "paypal";
 
   const form = useForm<CheckoutFormInput>({
     resolver: zodResolver(checkoutFormSchema),
@@ -90,6 +91,7 @@ export function CheckoutForm(props: {
     props.paymentOptions.paypalEnabled &&
     (props.paymentOptions.showPaypalAlways || quoteCurrency !== "NGN");
   const canPay = props.paymentOptions.cardEnabled || showPaypal;
+  const canSubmit = canPay && !!quote && !quoteUpdating;
 
   const quotePayload = useMemo(
     () => ({
@@ -143,7 +145,7 @@ export function CheckoutForm(props: {
 
   useEffect(() => {
     if (!showPaypal && selectedPaymentMethod === "paypal") {
-      form.setValue("paymentMethod", "card", { shouldDirty: true, shouldValidate: true });
+      form.setValue("paymentMethod", "pay_online", { shouldDirty: true, shouldValidate: true });
       return;
     }
 
@@ -151,6 +153,10 @@ export function CheckoutForm(props: {
       form.setValue("paymentMethod", "paypal", { shouldDirty: true, shouldValidate: true });
     }
   }, [form, props.paymentOptions.cardEnabled, selectedPaymentMethod, showPaypal]);
+
+  const payButtonLabel = quote
+    ? `Pay ${formatCurrency(quote.total, quote.currency)}`
+    : "Calculating total...";
 
   async function startPayment(
     orderCode: string,
@@ -188,6 +194,10 @@ export function CheckoutForm(props: {
     }
     if (!canPay) {
       setError("No payment method is currently available. Please try again later.");
+      return;
+    }
+    if (!quote) {
+      setError("Please wait while we calculate your total.");
       return;
     }
 
@@ -316,22 +326,23 @@ export function CheckoutForm(props: {
             })
           }
           showPaypal={showPaypal}
-          cardDisabled={!props.paymentOptions.cardEnabled}
+          onlineDisabled={!props.paymentOptions.cardEnabled}
           paypalDisabled={!props.paymentOptions.paypalEnabled}
         />
 
         <div className="rounded-xl border border-border bg-secondary/30 p-4 text-sm">
-          <div className="flex justify-between">
-            <span>Subtotal</span>
-            <span>{quote ? formatCurrency(quote.subtotal, quote.currency) : "..."}</span>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span className="text-foreground/80">{quote ? formatCurrency(quote.subtotal, quote.currency) : "..."}</span>
           </div>
-          <div className="mt-2 flex justify-between">
-            <span>Delivery</span>
-            <span>{quote ? formatCurrency(quote.deliveryFee, quote.currency) : "..."}</span>
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-muted-foreground">Delivery</span>
+            <span className="text-foreground/80">{quote ? formatCurrency(quote.deliveryFee, quote.currency) : "..."}</span>
           </div>
-          <div className="mt-3 flex justify-between font-semibold text-primary">
+          <div className="my-3 border-t border-border/70" aria-hidden="true" />
+          <div className="flex items-center justify-between text-base font-semibold text-foreground">
             <span>Total</span>
-            <span>{quote ? formatCurrency(quote.total, quote.currency) : "..."}</span>
+            <span className="text-lg font-bold text-primary">{quote ? formatCurrency(quote.total, quote.currency) : "..."}</span>
           </div>
           {quoteUpdating ? <p className="mt-2 text-xs text-muted-foreground">Updating quote...</p> : null}
         </div>
@@ -343,8 +354,15 @@ export function CheckoutForm(props: {
         ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-        <Button className="w-full" type="submit" disabled={submitting || !canPay}>
-          {submitting ? "Redirecting to payment..." : "Pay now"}
+        <Button className="w-full" type="submit" disabled={submitting || !canSubmit} aria-busy={submitting}>
+          {submitting ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Initializing payment...
+            </span>
+          ) : (
+            payButtonLabel
+          )}
         </Button>
       </section>
     </form>

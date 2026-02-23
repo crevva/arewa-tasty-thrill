@@ -10,7 +10,14 @@ export const quoteSchema = z.object({
   items: z.array(cartItemSchema).min(1)
 });
 
-export const checkoutPaymentMethodSchema = z.enum(["card", "paypal"]);
+export const checkoutPaymentMethodSchema = z.enum(["pay_online", "paypal"]);
+
+export type CheckoutPaymentMethod = z.infer<typeof checkoutPaymentMethodSchema>;
+
+// Backward compatibility for older clients still sending "card".
+export const checkoutPaymentMethodInputSchema = z
+  .enum(["pay_online", "paypal", "card"])
+  .transform((value): CheckoutPaymentMethod => (value === "card" ? "pay_online" : value));
 
 export const checkoutSchema = quoteSchema.extend({
   customer: z.object({
@@ -24,7 +31,7 @@ export const checkoutSchema = quoteSchema.extend({
     landmark: z.string().optional().default(""),
     notes: z.string().optional().default("")
   }),
-  paymentMethod: checkoutPaymentMethodSchema
+  paymentMethod: checkoutPaymentMethodInputSchema
 });
 
 export const orderLookupSchema = z.object({
@@ -38,4 +45,3 @@ export const claimOrdersSchema = z.object({
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 export type QuoteInput = z.infer<typeof quoteSchema>;
-export type CheckoutPaymentMethod = z.infer<typeof checkoutPaymentMethodSchema>;

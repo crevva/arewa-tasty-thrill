@@ -18,6 +18,7 @@ const serverEnvSchema = z.object({
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_WEBHOOK_ID: z.string().optional(),
   PAYSTACK_SECRET_KEY: z.string().optional(),
+  NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: z.string().optional(),
   PAYSTACK_WEBHOOK_SECRET: z.string().optional(),
   FLUTTERWAVE_SECRET_KEY: z.string().optional(),
   FLUTTERWAVE_WEBHOOK_SECRET: z.string().optional(),

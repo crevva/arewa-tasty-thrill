@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 import { badRequest, internalError, ok } from "@/lib/utils/http";
-import { checkoutPaymentMethodSchema } from "@/lib/validators/checkout";
+import { checkoutPaymentMethodInputSchema } from "@/lib/validators/checkout";
 import { getEnabledPaymentProviders, resolveCardPaymentProvider } from "@/payments";
 import { startCheckoutWithProvider } from "@/server/payments/checkout";
 
 const startPaymentSchema = z.object({
   orderCode: z.string().min(3),
-  paymentMethod: checkoutPaymentMethodSchema
+  paymentMethod: checkoutPaymentMethodInputSchema
 });
 
 export async function POST(request: Request) {
@@ -52,4 +52,3 @@ export async function POST(request: Request) {
     return internalError(error);
   }
 }
-

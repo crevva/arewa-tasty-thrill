@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { signIn } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const authProvider = process.env.NEXT_PUBLIC_AUTH_PROVIDER;
 
@@ -18,6 +20,7 @@ function SignInContent() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [oauthBusy, setOauthBusy] = useState(false);
 
   async function handleCredentialsSignIn(event: FormEvent) {
     event.preventDefault();
@@ -42,7 +45,13 @@ function SignInContent() {
   }
 
   async function handleGoogleSignIn() {
-    await signIn("google", { callbackUrl: returnTo });
+    setError(null);
+    setOauthBusy(true);
+    try {
+      await signIn("google", { callbackUrl: returnTo });
+    } finally {
+      setOauthBusy(false);
+    }
   }
 
   if (authProvider === "supabase") {
@@ -87,12 +96,26 @@ function SignInContent() {
               required
             />
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <Button className="w-full" type="submit" disabled={busy}>
-              {busy ? "Signing in..." : "Sign in with credentials"}
+            <Button className="w-full" type="submit" disabled={busy || oauthBusy}>
+              {busy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  Signing in...
+                </span>
+              ) : (
+                "Sign in with credentials"
+              )}
             </Button>
           </form>
-          <Button className="w-full" variant="outline" onClick={handleGoogleSignIn}>
-            Sign in with Google
+          <Button className="w-full" variant="outline" onClick={handleGoogleSignIn} disabled={busy || oauthBusy}>
+            {oauthBusy ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Redirecting...
+              </span>
+            ) : (
+              "Sign in with Google"
+            )}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             New here? <Link href="/auth/register" className="font-semibold text-primary">Create account</Link>
@@ -105,7 +128,23 @@ function SignInContent() {
 
 export default function SignInPage() {
   return (
-    <Suspense fallback={<section className="section-shell"><p>Loading sign-in...</p></section>}>
+    <Suspense
+      fallback={
+        <section className="section-shell">
+          <Card className="mx-auto max-w-lg">
+            <CardHeader>
+              <Skeleton className="h-7 w-32" />
+              <Skeleton className="mt-2 h-4 w-64 max-w-full" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-10 w-full rounded-md" />
+              <Skeleton className="h-10 w-full rounded-md" />
+              <Skeleton className="h-10 w-full rounded-md" />
+            </CardContent>
+          </Card>
+        </section>
+      }
+    >
       <SignInContent />
     </Suspense>
   );

@@ -2,10 +2,12 @@
 
 import { FormEvent, Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 function SupabaseSignInContent() {
@@ -45,14 +47,20 @@ function SupabaseSignInContent() {
   }
 
   async function handleGoogle() {
-    const supabase = createSupabaseBrowserClient();
-    const callbackUrl = `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(returnTo)}`;
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: callbackUrl
-      }
-    });
+    setError(null);
+    setBusy(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const callbackUrl = `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(returnTo)}`;
+      await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: callbackUrl
+        }
+      });
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -72,11 +80,25 @@ function SupabaseSignInContent() {
               required
             />
             <Button className="w-full" type="submit" disabled={busy}>
-              {busy ? "Sending link..." : "Send magic link"}
+              {busy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  Sending link...
+                </span>
+              ) : (
+                "Send magic link"
+              )}
             </Button>
           </form>
-          <Button className="w-full" variant="outline" onClick={handleGoogle}>
-            Continue with Google
+          <Button className="w-full" variant="outline" onClick={handleGoogle} disabled={busy}>
+            {busy ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Redirecting...
+              </span>
+            ) : (
+              "Continue with Google"
+            )}
           </Button>
           {message ? <p className="text-sm text-green-700">{message}</p> : null}
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -88,7 +110,23 @@ function SupabaseSignInContent() {
 
 export default function SupabaseSignInPage() {
   return (
-    <Suspense fallback={<section className="section-shell"><p>Loading sign-in...</p></section>}>
+    <Suspense
+      fallback={
+        <section className="section-shell">
+          <Card className="mx-auto max-w-lg">
+            <CardHeader>
+              <Skeleton className="h-7 w-40" />
+              <Skeleton className="mt-2 h-4 w-64 max-w-full" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-10 w-full rounded-md" />
+              <Skeleton className="h-10 w-full rounded-md" />
+              <Skeleton className="h-10 w-full rounded-md" />
+            </CardContent>
+          </Card>
+        </section>
+      }
+    >
       <SupabaseSignInContent />
     </Suspense>
   );

@@ -9,7 +9,7 @@ type PaymentMethodSelectorProps = {
   value: CheckoutPaymentMethod;
   onChange: (value: CheckoutPaymentMethod) => void;
   showPaypal: boolean;
-  cardDisabled?: boolean;
+  onlineDisabled?: boolean;
   paypalDisabled?: boolean;
 };
 
@@ -19,6 +19,7 @@ type PaymentOption = {
   subtext: string;
   note: string;
   badge?: string;
+  microcopy?: string;
   disabled?: boolean;
 };
 
@@ -26,17 +27,18 @@ export function PaymentMethodSelector({
   value,
   onChange,
   showPaypal,
-  cardDisabled = false,
+  onlineDisabled = false,
   paypalDisabled = false
 }: PaymentMethodSelectorProps) {
   const options: PaymentOption[] = [
     {
-      value: "card",
-      title: "Pay with Card or Bank",
-      subtext: "Visa • Mastercard • Verve • Bank Transfer",
+      value: "pay_online",
+      title: "Pay Online",
+      subtext: "Card \u2022 Bank Transfer \u2022 USSD",
       note: "Fast and secure checkout",
       badge: "Recommended",
-      disabled: cardDisabled
+      microcopy: "Powered by Paystack",
+      disabled: onlineDisabled
     },
     ...(showPaypal
       ? [
@@ -94,7 +96,7 @@ export function PaymentMethodSelector({
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-semibold text-foreground">{option.title}</span>
                       {option.badge ? (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                        <span className="rounded-full border border-primary/10 bg-primary/5 px-1.5 py-0.5 text-[10px] font-medium text-primary/80">
                           {option.badge}
                         </span>
                       ) : null}
@@ -112,6 +114,9 @@ export function PaymentMethodSelector({
                 </div>
 
                 <p className="mt-2 text-xs text-muted-foreground">{option.note}</p>
+                {option.microcopy ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground/80">{option.microcopy}</p>
+                ) : null}
               </div>
             </label>
           );
