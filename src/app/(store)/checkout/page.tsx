@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { getSession } from "@/auth";
 import { CheckoutForm } from "@/components/store/checkout-form";
 import { getDb } from "@/lib/db";
-import { getEnabledPaymentProviders } from "@/payments";
+import { getEnv } from "@/lib/env";
+import { CARD_PAYMENT_PROVIDERS, getEnabledPaymentProviders } from "@/payments";
 import { listDeliveryZones } from "@/server/store/catalog";
 
 export const metadata: Metadata = {
@@ -13,6 +14,8 @@ export const metadata: Metadata = {
 
 export default async function CheckoutPage() {
   const [zones, session] = await Promise.all([listDeliveryZones(), getSession()]);
+  const enabledProviders = getEnabledPaymentProviders();
+  const env = getEnv();
 
   let profile: { name: string | null; email: string | null; phone: string | null } | null = null;
   if (session?.userId) {
@@ -40,7 +43,11 @@ export default async function CheckoutPage() {
           fee: zone.fee,
           eta_text: zone.eta_text
         }))}
-        enabledProviders={getEnabledPaymentProviders()}
+        paymentOptions={{
+          cardEnabled: enabledProviders.some((provider) => CARD_PAYMENT_PROVIDERS.includes(provider)),
+          paypalEnabled: enabledProviders.includes("paypal"),
+          showPaypalAlways: env.SHOW_PAYPAL_ALWAYS === "true"
+        }}
         prefill={
           profile
             ? {

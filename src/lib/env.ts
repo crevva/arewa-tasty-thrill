@@ -23,6 +23,7 @@ const serverEnvSchema = z.object({
   FLUTTERWAVE_WEBHOOK_SECRET: z.string().optional(),
   ENABLED_PAYMENT_PROVIDERS: z.string().default("paystack,stripe,paypal,flutterwave"),
   PRIMARY_PAYMENT_PROVIDER: z.string().default("paystack"),
+  SHOW_PAYPAL_ALWAYS: z.enum(["true", "false"]).default("false"),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().email().optional(),
   RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().default(60),

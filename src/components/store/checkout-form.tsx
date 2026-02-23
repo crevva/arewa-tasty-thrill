@@ -6,11 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { PaymentMethodSelector } from "@/components/checkout/PaymentMethodSelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { checkoutPaymentMethodSchema, type CheckoutPaymentMethod } from "@/lib/validators/checkout";
 import { formatCurrency } from "@/lib/utils/cn";
 import { useCartStore } from "@/state/cart-store";
 
@@ -23,7 +25,7 @@ const checkoutFormSchema = z.object({
   area: z.string().min(2),
   landmark: z.string().optional(),
   notes: z.string().optional(),
-  paymentProvider: z.enum(["paystack", "stripe", "paypal", "flutterwave"])
+  paymentMethod: checkoutPaymentMethodSchema
 });
 
 type CheckoutFormInput = z.infer<typeof checkoutFormSchema>;
@@ -44,7 +46,11 @@ type QuoteState = {
 
 export function CheckoutForm(props: {
   zones: DeliveryZone[];
-  enabledProviders: string[];
+  paymentOptions: {
+    cardEnabled: boolean;
+    paypalEnabled: boolean;
+    showPaypalAlways: boolean;
+  };
   prefill?: {
     name?: string | null;
     email?: string | null;
@@ -54,11 +60,13 @@ export function CheckoutForm(props: {
   const items = useCartStore((state) => state.items);
   const clearCart = useCartStore((state) => state.clear);
   const [quote, setQuote] = useState<QuoteState | null>(null);
+  const [quoteUpdating, setQuoteUpdating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const defaultZoneId = props.zones[0]?.id;
-  const defaultProvider = (props.enabledProviders[0] ?? "paystack") as CheckoutFormInput["paymentProvider"];
+  const defaultPaymentMethod: CheckoutPaymentMethod =
+    props.paymentOptions.cardEnabled || !props.paymentOptions.paypalEnabled ? "card" : "paypal";
 
   const form = useForm<CheckoutFormInput>({
     resolver: zodResolver(checkoutFormSchema),
@@ -71,11 +79,17 @@ export function CheckoutForm(props: {
       area: "",
       landmark: "",
       notes: "",
-      paymentProvider: defaultProvider
+      paymentMethod: defaultPaymentMethod
     }
   });
 
   const selectedZoneId = form.watch("deliveryZoneId");
+  const selectedPaymentMethod = form.watch("paymentMethod");
+  const quoteCurrency = quote?.currency ?? "NGN";
+  const showPaypal =
+    props.paymentOptions.paypalEnabled &&
+    (props.paymentOptions.showPaypalAlways || quoteCurrency !== "NGN");
+  const canPay = props.paymentOptions.cardEnabled || showPaypal;
 
   const quotePayload = useMemo(
     () => ({
@@ -86,13 +100,19 @@ export function CheckoutForm(props: {
   );
 
   useEffect(() => {
-    if (!selectedZoneId || items.length === 0) {
+    if (items.length === 0) {
       setQuote(null);
+      setQuoteUpdating(false);
+      return;
+    }
+    if (!selectedZoneId) {
+      setQuoteUpdating(false);
       return;
     }
 
     const controller = new AbortController();
     const run = async () => {
+      setQuoteUpdating(true);
       const response = await fetch("/api/cart/quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -114,14 +134,60 @@ export function CheckoutForm(props: {
       if ((caught as Error).name !== "AbortError") {
         setError("Unable to calculate quote");
       }
+    }).finally(() => {
+      setQuoteUpdating(false);
     });
 
     return () => controller.abort();
   }, [quotePayload, items.length, selectedZoneId]);
 
+  useEffect(() => {
+    if (!showPaypal && selectedPaymentMethod === "paypal") {
+      form.setValue("paymentMethod", "card", { shouldDirty: true, shouldValidate: true });
+      return;
+    }
+
+    if (!props.paymentOptions.cardEnabled && showPaypal && selectedPaymentMethod !== "paypal") {
+      form.setValue("paymentMethod", "paypal", { shouldDirty: true, shouldValidate: true });
+    }
+  }, [form, props.paymentOptions.cardEnabled, selectedPaymentMethod, showPaypal]);
+
+  async function startPayment(
+    orderCode: string,
+    paymentMethod: CheckoutPaymentMethod
+  ): Promise<{ checkoutUrl: string; provider?: string }> {
+    const paymentResponse = await fetch("/api/payments/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderCode,
+        paymentMethod
+      })
+    });
+
+    const paymentPayload = (await paymentResponse.json()) as {
+      checkoutUrl?: string;
+      provider?: string;
+      error?: string;
+    };
+
+    if (!paymentResponse.ok || !paymentPayload.checkoutUrl) {
+      throw new Error(paymentPayload.error ?? "Could not initialize payment");
+    }
+
+    return {
+      checkoutUrl: paymentPayload.checkoutUrl,
+      provider: paymentPayload.provider
+    };
+  }
+
   async function onSubmit(values: CheckoutFormInput) {
     if (!items.length) {
       setError("Your cart is empty.");
+      return;
+    }
+    if (!canPay) {
+      setError("No payment method is currently available. Please try again later.");
       return;
     }
 
@@ -146,13 +212,13 @@ export function CheckoutForm(props: {
             landmark: values.landmark,
             notes: values.notes
           },
-          paymentProvider: values.paymentProvider
+          paymentMethod: values.paymentMethod
         })
       });
 
       const orderPayload = (await orderResponse.json()) as {
         orderCode?: string;
-        paymentProvider?: string;
+        paymentMethod?: CheckoutPaymentMethod;
         error?: string;
       };
 
@@ -160,22 +226,7 @@ export function CheckoutForm(props: {
         throw new Error(orderPayload.error ?? "Could not create order");
       }
 
-      const paymentResponse = await fetch(`/api/payments/${values.paymentProvider}/checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderCode: orderPayload.orderCode
-        })
-      });
-
-      const paymentPayload = (await paymentResponse.json()) as {
-        checkoutUrl?: string;
-        error?: string;
-      };
-
-      if (!paymentResponse.ok || !paymentPayload.checkoutUrl) {
-        throw new Error(paymentPayload.error ?? "Could not initialize payment");
-      }
+      const paymentPayload = await startPayment(orderPayload.orderCode, values.paymentMethod);
 
       clearCart();
       window.location.href = paymentPayload.checkoutUrl;
@@ -256,35 +307,43 @@ export function CheckoutForm(props: {
       <section className="premium-card space-y-4 p-6">
         <h2 className="font-heading text-2xl text-primary">Payment</h2>
 
-        <div className="space-y-2">
-          <Label htmlFor="paymentProvider">Payment method</Label>
-          <Select id="paymentProvider" {...form.register("paymentProvider")}>
-            {props.enabledProviders.map((provider) => (
-              <option value={provider} key={provider}>
-                {provider.charAt(0).toUpperCase() + provider.slice(1)}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <PaymentMethodSelector
+          value={selectedPaymentMethod}
+          onChange={(paymentMethod) =>
+            form.setValue("paymentMethod", paymentMethod, {
+              shouldDirty: true,
+              shouldValidate: true
+            })
+          }
+          showPaypal={showPaypal}
+          cardDisabled={!props.paymentOptions.cardEnabled}
+          paypalDisabled={!props.paymentOptions.paypalEnabled}
+        />
 
         <div className="rounded-xl border border-border bg-secondary/30 p-4 text-sm">
           <div className="flex justify-between">
             <span>Subtotal</span>
-            <span>{formatCurrency(quote?.subtotal ?? 0)}</span>
+            <span>{quote ? formatCurrency(quote.subtotal, quote.currency) : "..."}</span>
           </div>
           <div className="mt-2 flex justify-between">
             <span>Delivery</span>
-            <span>{formatCurrency(quote?.deliveryFee ?? 0)}</span>
+            <span>{quote ? formatCurrency(quote.deliveryFee, quote.currency) : "..."}</span>
           </div>
           <div className="mt-3 flex justify-between font-semibold text-primary">
             <span>Total</span>
-            <span>{formatCurrency(quote?.total ?? 0)}</span>
+            <span>{quote ? formatCurrency(quote.total, quote.currency) : "..."}</span>
           </div>
+          {quoteUpdating ? <p className="mt-2 text-xs text-muted-foreground">Updating quote...</p> : null}
         </div>
 
+        {!canPay ? (
+          <p className="text-sm text-destructive">
+            No payment method is currently available. Please contact support.
+          </p>
+        ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-        <Button className="w-full" type="submit" disabled={submitting}>
+        <Button className="w-full" type="submit" disabled={submitting || !canPay}>
           {submitting ? "Redirecting to payment..." : "Pay now"}
         </Button>
       </section>

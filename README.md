@@ -123,6 +123,15 @@ Primary provider:
 
 Enable list:
 - `ENABLED_PAYMENT_PROVIDERS=paystack,stripe,paypal,flutterwave`
+- `SHOW_PAYPAL_ALWAYS=false` (set `true` to always show PayPal on checkout)
+
+Checkout payment intent contract:
+- Frontend sends `paymentMethod` only: `card | paypal`.
+- `card` is routed server-side to an enabled card gateway (`paystack|flutterwave|stripe`) using `PRIMARY_PAYMENT_PROVIDER` as first preference.
+- `paypal` is routed server-side to PayPal.
+- PayPal option visibility in checkout:
+  - shown when quote currency is non-`NGN`, or
+  - when `SHOW_PAYPAL_ALWAYS=true`.
 
 Provider secrets:
 - Paystack: `PAYSTACK_SECRET_KEY`, `PAYSTACK_WEBHOOK_SECRET`

@@ -203,7 +203,7 @@ export async function createOrder(input: CreateOrderInput) {
       phone: guestPhone,
       name: input.customer.name
     },
-    paymentProvider: input.paymentProvider
+    paymentMethod: input.paymentMethod
   };
 }
 

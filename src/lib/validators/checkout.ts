@@ -10,6 +10,8 @@ export const quoteSchema = z.object({
   items: z.array(cartItemSchema).min(1)
 });
 
+export const checkoutPaymentMethodSchema = z.enum(["card", "paypal"]);
+
 export const checkoutSchema = quoteSchema.extend({
   customer: z.object({
     name: z.string().min(2),
@@ -22,7 +24,7 @@ export const checkoutSchema = quoteSchema.extend({
     landmark: z.string().optional().default(""),
     notes: z.string().optional().default("")
   }),
-  paymentProvider: z.enum(["paystack", "stripe", "paypal", "flutterwave"])
+  paymentMethod: checkoutPaymentMethodSchema
 });
 
 export const orderLookupSchema = z.object({
@@ -36,3 +38,4 @@ export const claimOrdersSchema = z.object({
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 export type QuoteInput = z.infer<typeof quoteSchema>;
+export type CheckoutPaymentMethod = z.infer<typeof checkoutPaymentMethodSchema>;

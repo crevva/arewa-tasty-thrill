@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       orderId: order.id,
       total: order.quote.total,
       currency: order.quote.currency,
-      paymentProvider: parsed.data.paymentProvider
+      paymentMethod: parsed.data.paymentMethod
     });
   } catch (error) {
     return internalError(error);
