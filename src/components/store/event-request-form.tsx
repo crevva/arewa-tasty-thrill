@@ -56,7 +56,7 @@ export function EventRequestForm() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" {...form.register("phone")} />
+          <Input id="phone" type="tel" inputMode="tel" autoComplete="tel" {...form.register("phone")} />
         </div>
       </div>
 
@@ -78,7 +78,15 @@ export function EventRequestForm() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="guests_estimate">Estimated guests</Label>
-          <Input id="guests_estimate" type="number" {...form.register("guests_estimate", { valueAsNumber: true })} />
+          <Input
+            id="guests_estimate"
+            type="number"
+            min={1}
+            max={5000}
+            step={1}
+            inputMode="numeric"
+            {...form.register("guests_estimate", { valueAsNumber: true })}
+          />
         </div>
       </div>
 

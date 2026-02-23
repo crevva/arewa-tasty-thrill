@@ -6,6 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils/cn";
 
+function normalizeOrderCodeInput(value: string) {
+  const cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!cleaned) {
+    return "";
+  }
+
+  const withoutPrefix = cleaned.startsWith("AT") ? cleaned.slice(2) : cleaned;
+  return `AT-${withoutPrefix.slice(0, 8)}`;
+}
+
 export function OrderLookupForm() {
   const [orderCode, setOrderCode] = useState("");
   const [emailOrPhone, setEmailOrPhone] = useState("");
@@ -29,6 +39,13 @@ export function OrderLookupForm() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+
+    const normalizedCode = normalizeOrderCodeInput(orderCode);
+    if (!/^AT-[A-Z0-9]{8}$/.test(normalizedCode)) {
+      setError("Order code must be in the format AT-XXXXXXXX.");
+      return;
+    }
+
     setBusy(true);
     setError(null);
     setResult(null);
@@ -37,7 +54,7 @@ export function OrderLookupForm() {
       const response = await fetch("/api/orders/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderCode, emailOrPhone })
+        body: JSON.stringify({ orderCode: normalizedCode, emailOrPhone })
       });
       const payload = (await response.json()) as {
         error?: string;
@@ -78,10 +95,20 @@ export function OrderLookupForm() {
           <Input
             id="orderCode"
             value={orderCode}
-            onChange={(event) => setOrderCode(event.target.value.toUpperCase())}
+            onChange={(event) => setOrderCode(normalizeOrderCodeInput(event.target.value))}
+            onBlur={() => {
+              if (orderCode === "AT-") {
+                setOrderCode("");
+              }
+            }}
             placeholder="AT-XXXXXXXX"
+            maxLength={11}
+            autoCapitalize="characters"
+            spellCheck={false}
+            pattern="AT-[A-Z0-9]{8}"
             required
           />
+          <p className="text-xs text-muted-foreground">Use the exact code shown in your order confirmation.</p>
         </div>
         <div className="space-y-2">
           <label htmlFor="emailOrPhone" className="text-sm font-medium text-primary">

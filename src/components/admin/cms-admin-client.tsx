@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 type CmsPage = {
@@ -98,20 +99,20 @@ export function CmsAdminClient() {
             )
           }
         />
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
+        <div className="flex items-center gap-2 text-sm">
+          <Switch
             checked={page.published}
-            onChange={(event) =>
+            onCheckedChange={(checked) =>
               setPages((rows) =>
                 rows.map((row) =>
-                  row.slug === page.slug ? { ...row, published: event.target.checked } : row
+                  row.slug === page.slug ? { ...row, published: checked } : row
                 )
               )
             }
+            aria-label={`Toggle published state for ${page.slug}`}
           />
-          Published
-        </label>
+          <span>Published</span>
+        </div>
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 

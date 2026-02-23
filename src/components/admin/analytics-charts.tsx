@@ -3,6 +3,7 @@
 import {
   Bar,
   BarChart,
+  Cell,
   CartesianGrid,
   Pie,
   PieChart,
@@ -21,6 +22,16 @@ export function AnalyticsCharts(props: {
   topProducts: Array<{ name: string; qty: number }>;
   zoneDemand: Array<{ zone: string; orders_count: number }>;
 }) {
+  const borderColor = "hsl(var(--border))";
+  const mutedColor = "hsl(var(--muted-foreground))";
+  const primaryColor = "hsl(var(--primary))";
+  const pieColors = [
+    "hsl(var(--primary))",
+    "hsl(var(--accent))",
+    "hsl(var(--secondary-foreground))",
+    "hsl(var(--muted-foreground))"
+  ];
+
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <Card>
@@ -31,11 +42,18 @@ export function AnalyticsCharts(props: {
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={props.revenueRows}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis tickFormatter={(value) => formatCurrency(value)} />
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                <Bar dataKey="revenue" fill="#5d0f2f" radius={[6, 6, 0, 0]} />
+                <CartesianGrid stroke={borderColor} strokeDasharray="3 3" />
+                <XAxis dataKey="day" tick={{ fill: mutedColor }} />
+                <YAxis tick={{ fill: mutedColor }} tickFormatter={(value) => formatCurrency(value)} />
+                <Tooltip
+                  formatter={(value: number) => formatCurrency(value)}
+                  contentStyle={{
+                    border: `1px solid ${borderColor}`,
+                    background: "hsl(var(--popover))",
+                    color: "hsl(var(--popover-foreground))"
+                  }}
+                />
+                <Bar dataKey="revenue" fill={primaryColor} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -50,8 +68,18 @@ export function AnalyticsCharts(props: {
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Tooltip />
-                <Pie data={props.statusRows} dataKey="count" nameKey="status" outerRadius={100} fill="#f97316" label />
+                <Tooltip
+                  contentStyle={{
+                    border: `1px solid ${borderColor}`,
+                    background: "hsl(var(--popover))",
+                    color: "hsl(var(--popover-foreground))"
+                  }}
+                />
+                <Pie data={props.statusRows} dataKey="count" nameKey="status" outerRadius={100} label>
+                  {props.statusRows.map((row, index) => (
+                    <Cell key={row.status} fill={pieColors[index % pieColors.length]} />
+                  ))}
+                </Pie>
               </PieChart>
             </ResponsiveContainer>
           </div>

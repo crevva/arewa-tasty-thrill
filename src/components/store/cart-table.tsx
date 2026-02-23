@@ -3,9 +3,11 @@
 import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils/cn";
 import { useCartStore } from "@/state/cart-store";
+
+const MIN_QTY = 1;
+const MAX_QTY = 25;
 
 export function CartTable() {
   const items = useCartStore((state) => state.items);
@@ -35,14 +37,33 @@ export function CartTable() {
               <p className="text-sm text-muted-foreground">{formatCurrency(item.unitPrice)} each</p>
             </div>
             <div className="flex items-center gap-3">
-              <Input
-                className="w-16"
-                type="number"
-                min={1}
-                value={item.quantity}
-                onChange={(event) => updateQuantity(item.productId, Number(event.target.value || 1))}
-                aria-label={`Quantity for ${item.name}`}
-              />
+              <div className="inline-flex items-center rounded-md border border-input bg-background">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 rounded-none rounded-l-md px-0 text-foreground hover:bg-secondary/60"
+                  onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                  disabled={item.quantity <= MIN_QTY}
+                  aria-label={`Decrease quantity for ${item.name}`}
+                >
+                  -
+                </Button>
+                <span className="w-10 text-center text-sm font-semibold text-foreground" aria-live="polite">
+                  {item.quantity}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 rounded-none rounded-r-md px-0 text-foreground hover:bg-secondary/60"
+                  onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                  disabled={item.quantity >= MAX_QTY}
+                  aria-label={`Increase quantity for ${item.name}`}
+                >
+                  +
+                </Button>
+              </div>
               <p className="w-24 text-right text-sm font-semibold text-primary">
                 {formatCurrency(item.unitPrice * item.quantity)}
               </p>

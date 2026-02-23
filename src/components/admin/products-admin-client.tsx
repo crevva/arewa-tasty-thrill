@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 type Product = {
   id: string;
@@ -24,9 +25,39 @@ type Category = {
   slug: string;
 };
 
+const DEFAULT_NAIRA_INPUT = "0.00";
+
+function sanitizeMoneyInput(value: string) {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  if (!cleaned) {
+    return "";
+  }
+
+  const [whole, ...decimals] = cleaned.split(".");
+  if (decimals.length === 0) {
+    return whole;
+  }
+
+  return `${whole}.${decimals.join("").slice(0, 2)}`;
+}
+
+function parseNairaToKobo(value: string) {
+  const amount = Number.parseFloat(value);
+  if (!Number.isFinite(amount) || amount < 0) {
+    return 0;
+  }
+
+  return Math.round(amount * 100);
+}
+
+function formatKoboToNaira(value: number) {
+  return (value / 100).toFixed(2);
+}
+
 export function ProductsAdminClient() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const defaultCategory = categories[0]?.id ?? "";
@@ -35,7 +66,7 @@ export function ProductsAdminClient() {
     name: "",
     slug: "",
     description: "",
-    base_price: 0,
+    base_price: DEFAULT_NAIRA_INPUT,
     active: true,
     in_stock: true,
     category_id: ""
@@ -56,6 +87,11 @@ export function ProductsAdminClient() {
     }
 
     setProducts(productPayload.products);
+    setPriceDrafts(
+      Object.fromEntries(
+        productPayload.products.map((product) => [product.id, formatKoboToNaira(product.base_price)])
+      )
+    );
     setCategories(categoryPayload.categories);
   }
 
@@ -68,6 +104,19 @@ export function ProductsAdminClient() {
       setForm((current) => ({ ...current, category_id: defaultCategory }));
     }
   }, [defaultCategory, form.category_id]);
+
+  function setProductPriceDraft(productId: string, rawValue: string) {
+    const sanitized = sanitizeMoneyInput(rawValue);
+    setPriceDrafts((current) => ({ ...current, [productId]: sanitized }));
+
+    setProducts((rows) =>
+      rows.map((row) =>
+        row.id === productId
+          ? { ...row, base_price: parseNairaToKobo(sanitized || "0") }
+          : row
+      )
+    );
+  }
 
   const productRows = useMemo(() => products, [products]);
 
@@ -82,7 +131,10 @@ export function ProductsAdminClient() {
           const response = await fetch("/api/admin/products", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(form)
+            body: JSON.stringify({
+              ...form,
+              base_price: parseNairaToKobo(form.base_price || "0")
+            })
           });
 
           const payload = (await response.json()) as { error?: string };
@@ -95,7 +147,7 @@ export function ProductsAdminClient() {
             name: "",
             slug: "",
             description: "",
-            base_price: 0,
+            base_price: DEFAULT_NAIRA_INPUT,
             active: true,
             in_stock: true,
             category_id: defaultCategory
@@ -122,12 +174,14 @@ export function ProductsAdminClient() {
           required
         />
         <Input
-          placeholder="Base price (kobo)"
-          type="number"
+          placeholder="Base price (NGN)"
+          type="text"
+          inputMode="decimal"
           value={form.base_price}
-          onChange={(event) =>
-            setForm((current) => ({ ...current, base_price: Number(event.target.value) }))
-          }
+          onChange={(event) => {
+            const sanitized = sanitizeMoneyInput(event.target.value);
+            setForm((current) => ({ ...current, base_price: sanitized }));
+          }}
           required
         />
         <Select
@@ -141,23 +195,25 @@ export function ProductsAdminClient() {
             </option>
           ))}
         </Select>
-        <div className="flex gap-2">
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
+        <div className="flex flex-wrap gap-4">
+          <div className="flex items-center gap-2 text-xs">
+            <Switch
               checked={form.active}
-              onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))}
+              onCheckedChange={(checked) => setForm((current) => ({ ...current, active: checked }))}
+              aria-label="Toggle active state for new product"
             />
-            Active
-          </label>
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
+            <span>Active</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <Switch
               checked={form.in_stock}
-              onChange={(event) => setForm((current) => ({ ...current, in_stock: event.target.checked }))}
+              onCheckedChange={(checked) =>
+                setForm((current) => ({ ...current, in_stock: checked }))
+              }
+              aria-label="Toggle stock state for new product"
             />
-            In stock
-          </label>
+            <span>In stock</span>
+          </div>
         </div>
         <div className="md:col-span-2">
           <Button type="submit">Create product</Button>
@@ -201,15 +257,10 @@ export function ProductsAdminClient() {
                 }
               />
               <Input
-                type="number"
-                value={product.base_price}
-                onChange={(event) =>
-                  setProducts((rows) =>
-                    rows.map((row) =>
-                      row.id === product.id ? { ...row, base_price: Number(event.target.value) } : row
-                    )
-                  )
-                }
+                type="text"
+                inputMode="decimal"
+                value={priceDrafts[product.id] ?? formatKoboToNaira(product.base_price)}
+                onChange={(event) => setProductPriceDraft(product.id, event.target.value)}
               />
               <Select
                 value={product.category_id}
@@ -227,35 +278,35 @@ export function ProductsAdminClient() {
                   </option>
                 ))}
               </Select>
-              <div className="flex gap-3 text-xs">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+              <div className="flex flex-wrap gap-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <Switch
                     checked={product.active}
-                    onChange={(event) =>
+                    onCheckedChange={(checked) =>
                       setProducts((rows) =>
                         rows.map((row) =>
-                          row.id === product.id ? { ...row, active: event.target.checked } : row
+                          row.id === product.id ? { ...row, active: checked } : row
                         )
                       )
                     }
+                    aria-label={`Toggle active state for ${product.name}`}
                   />
-                  Active
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                  <span>Active</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
                     checked={product.in_stock}
-                    onChange={(event) =>
+                    onCheckedChange={(checked) =>
                       setProducts((rows) =>
                         rows.map((row) =>
-                          row.id === product.id ? { ...row, in_stock: event.target.checked } : row
+                          row.id === product.id ? { ...row, in_stock: checked } : row
                         )
                       )
                     }
+                    aria-label={`Toggle stock state for ${product.name}`}
                   />
-                  In stock
-                </label>
+                  <span>In stock</span>
+                </div>
               </div>
             </div>
 

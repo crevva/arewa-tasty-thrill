@@ -6,6 +6,7 @@ import { Fraunces, Manrope } from "next/font/google";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { CartProvider } from "@/components/store/cart-provider";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 import { APP_NAME, APP_TAGLINE } from "@/lib/constants/branding";
 
 const manrope = Manrope({
@@ -57,17 +58,41 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+const themeScript = `
+(() => {
+  const storageKey = "theme";
+  const root = document.documentElement;
+
+  try {
+    const stored = localStorage.getItem(storageKey);
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const resolved = stored === "light" || stored === "dark" ? stored : prefersDark ? "dark" : "light";
+
+    root.classList.toggle("dark", resolved === "dark");
+    root.style.colorScheme = resolved;
+  } catch {
+    root.classList.remove("dark");
+    root.style.colorScheme = "light";
+  }
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className={`${manrope.variable} ${fraunces.variable} font-body antialiased`}>
-        <CartProvider>
-          <div className="min-h-screen bg-background text-foreground">
-            <SiteHeader />
-            <main>{children}</main>
-            <SiteFooter />
-          </div>
-        </CartProvider>
+        <ThemeProvider>
+          <CartProvider>
+            <div className="min-h-screen bg-background text-foreground">
+              <SiteHeader />
+              <main>{children}</main>
+              <SiteFooter />
+            </div>
+          </CartProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

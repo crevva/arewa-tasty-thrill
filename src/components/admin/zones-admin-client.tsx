@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 
 type Zone = {
   id: string;
@@ -21,14 +22,42 @@ const defaultForm = {
   state: "Lagos",
   city: "Lagos",
   zone: "",
-  fee: 0,
+  fee: "0.00",
   eta_text: "",
   active: true
 };
 
+function sanitizeMoneyInput(value: string) {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  if (!cleaned) {
+    return "";
+  }
+
+  const [whole, ...decimals] = cleaned.split(".");
+  if (decimals.length === 0) {
+    return whole;
+  }
+
+  return `${whole}.${decimals.join("").slice(0, 2)}`;
+}
+
+function parseNairaToKobo(value: string) {
+  const amount = Number.parseFloat(value);
+  if (!Number.isFinite(amount) || amount < 0) {
+    return 0;
+  }
+
+  return Math.round(amount * 100);
+}
+
+function formatKoboToNaira(value: number) {
+  return (value / 100).toFixed(2);
+}
+
 export function ZonesAdminClient() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [form, setForm] = useState(defaultForm);
+  const [feeDrafts, setFeeDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -40,11 +69,25 @@ export function ZonesAdminClient() {
     }
 
     setZones(payload.zones);
+    setFeeDrafts(
+      Object.fromEntries(payload.zones.map((zone) => [zone.id, formatKoboToNaira(zone.fee)]))
+    );
   }
 
   useEffect(() => {
     load().catch(() => setError("Unable to load zones"));
   }, []);
+
+  function setZoneFeeDraft(zoneId: string, rawValue: string) {
+    const sanitized = sanitizeMoneyInput(rawValue);
+    setFeeDrafts((current) => ({ ...current, [zoneId]: sanitized }));
+
+    setZones((rows) =>
+      rows.map((row) =>
+        row.id === zoneId ? { ...row, fee: parseNairaToKobo(sanitized || "0") } : row
+      )
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -55,7 +98,10 @@ export function ZonesAdminClient() {
           const response = await fetch("/api/admin/delivery-zones", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(form)
+            body: JSON.stringify({
+              ...form,
+              fee: parseNairaToKobo(form.fee || "0")
+            })
           });
           const payload = (await response.json()) as { error?: string };
           if (!response.ok) {
@@ -70,8 +116,26 @@ export function ZonesAdminClient() {
         <Input value={form.state} onChange={(event) => setForm((current) => ({ ...current, state: event.target.value }))} />
         <Input value={form.city} onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))} />
         <Input placeholder="Zone" value={form.zone} onChange={(event) => setForm((current) => ({ ...current, zone: event.target.value }))} required />
-        <Input type="number" placeholder="Fee in kobo" value={form.fee} onChange={(event) => setForm((current) => ({ ...current, fee: Number(event.target.value) }))} required />
+        <Input
+          type="text"
+          inputMode="decimal"
+          placeholder="Fee (NGN)"
+          value={form.fee}
+          onChange={(event) => {
+            const sanitized = sanitizeMoneyInput(event.target.value);
+            setForm((current) => ({ ...current, fee: sanitized }));
+          }}
+          required
+        />
         <Input placeholder="ETA text" value={form.eta_text} onChange={(event) => setForm((current) => ({ ...current, eta_text: event.target.value }))} required />
+        <div className="flex items-center gap-2 text-xs">
+          <Switch
+            checked={form.active}
+            onCheckedChange={(checked) => setForm((current) => ({ ...current, active: checked }))}
+            aria-label="Toggle active state for new delivery zone"
+          />
+          <span>Active</span>
+        </div>
         <div className="md:col-span-3">
           <Button type="submit">Create zone</Button>
         </div>
@@ -85,8 +149,25 @@ export function ZonesAdminClient() {
           <Input value={zone.state} onChange={(event) => setZones((rows) => rows.map((row) => (row.id === zone.id ? { ...row, state: event.target.value } : row)))} />
           <Input value={zone.city} onChange={(event) => setZones((rows) => rows.map((row) => (row.id === zone.id ? { ...row, city: event.target.value } : row)))} />
           <Input value={zone.zone} onChange={(event) => setZones((rows) => rows.map((row) => (row.id === zone.id ? { ...row, zone: event.target.value } : row)))} />
-          <Input type="number" value={zone.fee} onChange={(event) => setZones((rows) => rows.map((row) => (row.id === zone.id ? { ...row, fee: Number(event.target.value) } : row)))} />
+          <Input
+            type="text"
+            inputMode="decimal"
+            value={feeDrafts[zone.id] ?? formatKoboToNaira(zone.fee)}
+            onChange={(event) => setZoneFeeDraft(zone.id, event.target.value)}
+          />
           <Input value={zone.eta_text} onChange={(event) => setZones((rows) => rows.map((row) => (row.id === zone.id ? { ...row, eta_text: event.target.value } : row)))} />
+          <div className="flex items-center gap-2 text-xs">
+            <Switch
+              checked={zone.active}
+              onCheckedChange={(checked) =>
+                setZones((rows) =>
+                  rows.map((row) => (row.id === zone.id ? { ...row, active: checked } : row))
+                )
+              }
+              aria-label={`Toggle active state for ${zone.zone}`}
+            />
+            <span>Active</span>
+          </div>
           <div className="md:col-span-3 flex gap-2">
             <Button
               onClick={async () => {

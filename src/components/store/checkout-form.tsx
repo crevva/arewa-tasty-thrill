@@ -211,7 +211,7 @@ export function CheckoutForm(props: {
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Phone</Label>
-            <Input id="phone" {...form.register("phone")} />
+            <Input id="phone" type="tel" inputMode="tel" autoComplete="tel" {...form.register("phone")} />
           </div>
         </div>
 

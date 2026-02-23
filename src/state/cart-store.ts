@@ -12,6 +12,9 @@ export type CartItem = {
   quantity: number;
 };
 
+const MIN_CART_QTY = 1;
+const MAX_CART_QTY = 25;
+
 type CartStore = {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
@@ -27,25 +30,29 @@ export const useCartStore = create<CartStore>()(
     (set, get) => ({
       items: [],
       addItem: (item, quantity = 1) => {
+        const normalizedQty = Math.min(MAX_CART_QTY, Math.max(MIN_CART_QTY, quantity));
         const existing = get().items.find((cartItem) => cartItem.productId === item.productId);
         if (existing) {
           set({
             items: get().items.map((cartItem) =>
               cartItem.productId === item.productId
-                ? { ...cartItem, quantity: cartItem.quantity + quantity }
+                ? {
+                    ...cartItem,
+                    quantity: Math.min(MAX_CART_QTY, cartItem.quantity + normalizedQty)
+                  }
                 : cartItem
             )
           });
           return;
         }
 
-        set({ items: [...get().items, { ...item, quantity }] });
+        set({ items: [...get().items, { ...item, quantity: normalizedQty }] });
       },
       removeItem: (productId) => {
         set({ items: get().items.filter((item) => item.productId !== productId) });
       },
       updateQuantity: (productId, quantity) => {
-        const normalized = Math.max(1, quantity);
+        const normalized = Math.min(MAX_CART_QTY, Math.max(MIN_CART_QTY, quantity));
         set({
           items: get().items.map((item) =>
             item.productId === productId ? { ...item, quantity: normalized } : item

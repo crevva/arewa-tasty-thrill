@@ -15,7 +15,7 @@ export default async function GalleryPage() {
 
       <div className="columns-1 gap-4 sm:columns-2 lg:columns-3">
         {images.map((image, index) => (
-          <div key={`${image}-${index}`} className="mb-4 overflow-hidden rounded-2xl border border-primary/10 bg-white shadow-premium">
+          <div key={`${image}-${index}`} className="mb-4 overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-premium">
             <Image
               src={image}
               alt={`AT Thrill gallery shot ${index + 1}`}

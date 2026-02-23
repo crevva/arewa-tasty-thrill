@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { CartBadge } from "@/components/store/cart-badge";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { APP_SHORT_NAME } from "@/lib/constants/branding";
 
 const navItems = [
@@ -30,6 +31,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           <Link href="/order-lookup" className="focus-ring rounded-md text-sm font-medium text-muted-foreground hover:text-primary">
             Track Order
           </Link>

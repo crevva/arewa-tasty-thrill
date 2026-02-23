@@ -11,7 +11,7 @@ export default async function HomePage() {
   return (
     <div>
       <section className="section-shell">
-        <div className="overflow-hidden rounded-3xl border border-primary/10 bg-white shadow-premium">
+        <div className="overflow-hidden rounded-3xl border border-primary/10 bg-card shadow-premium">
           <div className="grid gap-8 p-8 md:grid-cols-[1.2fr_0.8fr] md:p-12">
             <div className="space-y-5">
               <p className="inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primary">

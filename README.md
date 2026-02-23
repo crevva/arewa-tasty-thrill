@@ -21,6 +21,20 @@ Premium ecommerce webapp for **Arewa Tasty Thrill** built with Next.js App Route
 - Admin dashboard with server-side allowlist authz (`ADMIN_EMAILS`)
 - Products/categories/orders/zones/events/CMS admin modules
 - SEO metadata, sitemap, robots, responsive image-heavy premium UI
+- Light mode default with premium opt-in dark mode toggle
+
+## Theme System
+- Light mode remains the default visual theme.
+- Dark mode is opt-in via the top navigation toggle and persists in `localStorage` (`theme=light|dark`).
+- If no stored preference exists, system color preference is used for first-time visits only.
+- No first-paint theme flash: root layout runs an inline pre-hydration script to set `<html class="dark">` early.
+- Theme tokens live in `src/app/globals.css`:
+  - Light tokens in `:root` (unchanged).
+  - Dark tokens in `.dark`.
+- Core theme runtime is implemented in:
+  - `src/components/theme/theme-provider.tsx`
+  - `src/components/theme/theme-toggle.tsx`
+- To retune colors, update only CSS variables in `src/app/globals.css` rather than hardcoding component colors.
 
 ## Project Structure
 - `src/auth`: provider-agnostic auth interface + adapters

@@ -6,6 +6,6 @@ export const eventRequestSchema = z.object({
   email: z.string().email(),
   event_date: z.string().optional(),
   event_type: z.string().min(2),
-  guests_estimate: z.coerce.number().int().positive().optional(),
+  guests_estimate: z.coerce.number().int().positive().max(5000).optional(),
   notes: z.string().max(2000).optional()
 });
