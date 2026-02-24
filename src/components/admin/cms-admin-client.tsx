@@ -3,12 +3,15 @@
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
+import { useToast } from "@/components/feedback/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { MESSAGES } from "@/lib/messages";
 
 type CmsPage = {
   id: string;
@@ -26,6 +29,7 @@ export function CmsAdminClient() {
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     const response = await fetch("/api/admin/cms-pages");
@@ -140,7 +144,7 @@ export function CmsAdminClient() {
           <span>Published</span>
         </div>
 
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <InlineNotice type="error" title={error} /> : null}
 
         <Button
           disabled={saving}
@@ -168,6 +172,7 @@ export function CmsAdminClient() {
               }
 
               await load();
+              toast.success(MESSAGES.admin.pageUpdated);
             } catch (caught) {
               setError(caught instanceof Error ? caught.message : "Unable to save page");
             } finally {

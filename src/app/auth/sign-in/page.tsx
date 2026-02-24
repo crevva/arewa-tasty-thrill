@@ -6,10 +6,12 @@ import { FormEvent, Suspense, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { signIn } from "next-auth/react";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MESSAGES } from "@/lib/messages";
 
 const authProvider = process.env.NEXT_PUBLIC_AUTH_PROVIDER;
 
@@ -27,22 +29,26 @@ function SignInContent() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+        callbackUrl: returnTo
+      });
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-      callbackUrl: returnTo
-    });
+      setBusy(false);
 
-    setBusy(false);
+      if (!result?.ok) {
+        setError("Your email or password is incorrect.");
+        return;
+      }
 
-    if (!result?.ok) {
-      setError("Invalid credentials.");
-      return;
+      window.location.href = result.url ?? returnTo;
+    } catch {
+      setBusy(false);
+      setError("Sign-in could not be completed. Please try again.");
     }
-
-    window.location.href = result.url ?? returnTo;
   }
 
   async function handleGoogleSignIn() {
@@ -50,6 +56,8 @@ function SignInContent() {
     setOauthBusy(true);
     try {
       await signIn("google", { callbackUrl: returnTo });
+    } catch {
+      setError(MESSAGES.auth.googleFailed);
     } finally {
       setOauthBusy(false);
     }
@@ -78,7 +86,7 @@ function SignInContent() {
       <Card className="mx-auto max-w-lg">
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
-          <CardDescription>Track orders, save addresses, and reorder quickly.</CardDescription>
+          <CardDescription>{MESSAGES.auth.optionalPrompt}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <form className="space-y-4" onSubmit={handleCredentialsSignIn}>
@@ -96,7 +104,7 @@ function SignInContent() {
               placeholder="Password"
               required
             />
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? <InlineNotice type="error" title={error} /> : null}
             <Button className="w-full" type="submit" disabled={busy || oauthBusy}>
               {busy ? (
                 <span className="inline-flex items-center gap-2">

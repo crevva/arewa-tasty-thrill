@@ -1,4 +1,6 @@
 import { quoteSchema } from "@/lib/validators/checkout";
+import { mapZodError } from "@/lib/errorMapper";
+import { MESSAGES } from "@/lib/messages";
 import { badRequest, internalError, ok } from "@/lib/utils/http";
 import { calculateQuote } from "@/server/orders/service";
 
@@ -7,7 +9,8 @@ export async function POST(request: Request) {
     const payload = await request.json();
     const parsed = quoteSchema.safeParse(payload);
     if (!parsed.success) {
-      return badRequest(parsed.error.issues[0]?.message ?? "Invalid request payload");
+      const validationError = mapZodError(parsed.error, "Please confirm your cart items and delivery zone.");
+      return badRequest(validationError.userMessage);
     }
 
     const quote = await calculateQuote({
@@ -20,6 +23,17 @@ export async function POST(request: Request) {
 
     return ok({ quote });
   } catch (error) {
-    return internalError(error);
+    if (error instanceof Error) {
+      if (error.message === "Delivery zone is invalid") {
+        return badRequest(MESSAGES.checkout.zoneUnsupported);
+      }
+      if (error.message === "One or more products are unavailable") {
+        return badRequest("One or more items in your cart are currently unavailable.");
+      }
+    }
+    return internalError(error, {
+      userMessage: MESSAGES.checkout.quoteFailed,
+      context: { route: "cart_quote" }
+    });
   }
 }

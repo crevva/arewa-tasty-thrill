@@ -3,10 +3,13 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
+import { useToast } from "@/components/feedback/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { MESSAGES } from "@/lib/messages";
 
 type Zone = {
   id: string;
@@ -63,6 +66,7 @@ export function ZonesAdminClient() {
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const toast = useToast();
 
   async function load() {
     const response = await fetch("/api/admin/delivery-zones");
@@ -149,6 +153,7 @@ export function ZonesAdminClient() {
             }
             setForm(defaultForm);
             await load();
+            toast.success(MESSAGES.admin.zoneCreated);
           } catch (caught) {
             setError(caught instanceof Error ? caught.message : "Unable to create zone");
           } finally {
@@ -196,7 +201,7 @@ export function ZonesAdminClient() {
         </div>
       </form>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <InlineNotice type="error" title={error} /> : null}
 
       {zones.map((zone) => (
         <article key={zone.id} className="premium-card grid gap-3 p-4 md:grid-cols-3">
@@ -243,6 +248,7 @@ export function ZonesAdminClient() {
                     return;
                   }
                   await load();
+                  toast.success(MESSAGES.admin.zoneUpdated);
                 } catch (caught) {
                   setError(caught instanceof Error ? caught.message : "Unable to update zone");
                 } finally {
@@ -277,6 +283,7 @@ export function ZonesAdminClient() {
                     return;
                   }
                   await load();
+                  toast.success(MESSAGES.admin.zoneDeleted);
                 } catch (caught) {
                   setError(caught instanceof Error ? caught.message : "Unable to delete zone");
                 } finally {

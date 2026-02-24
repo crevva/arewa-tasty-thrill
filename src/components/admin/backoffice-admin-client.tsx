@@ -3,6 +3,8 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
+import { useToast } from "@/components/feedback/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,6 +50,7 @@ export function BackofficeAdminClient() {
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const toast = useToast();
 
   const [userDrafts, setUserDrafts] = useState<
     Record<string, { role: BackofficeRole; status: BackofficeUserStatus }>
@@ -130,6 +133,7 @@ export function BackofficeAdminClient() {
 
       setInviteEmail("");
       await loadData();
+      toast.success("Invite sent.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to send invite");
     } finally {
@@ -151,6 +155,7 @@ export function BackofficeAdminClient() {
         throw new Error(payload.error ?? "Unable to revoke invite");
       }
       await loadData();
+      toast.success("Invite revoked.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to revoke invite");
     } finally {
@@ -181,6 +186,7 @@ export function BackofficeAdminClient() {
         throw new Error(payload.error ?? "Unable to update user");
       }
       await loadData();
+      toast.success("Backoffice user updated.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update user");
     } finally {
@@ -197,7 +203,7 @@ export function BackofficeAdminClient() {
         </p>
       </header>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <InlineNotice type="error" title={error} /> : null}
 
       <form className="premium-card grid gap-3 p-4 md:grid-cols-[1fr_180px_auto]" onSubmit={handleCreateInvite}>
         <div className="space-y-2">

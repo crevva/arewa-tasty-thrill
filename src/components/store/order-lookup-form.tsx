@@ -2,10 +2,18 @@
 
 import { FormEvent, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 
+import { EmptyState } from "@/components/feedback/empty-state";
+import { InlineNotice } from "@/components/feedback/inline-notice";
+import { LoadingState } from "@/components/feedback/loading-state";
+import { RetryButton } from "@/components/feedback/retry-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { mapUnknownError } from "@/lib/errorMapper";
+import { requestJson } from "@/lib/http/client";
+import { MESSAGES } from "@/lib/messages";
 import { formatCurrency } from "@/lib/utils/cn";
 
 function normalizeOrderCodeInput(value: string) {
@@ -19,6 +27,7 @@ function normalizeOrderCodeInput(value: string) {
 }
 
 export function OrderLookupForm() {
+  const params = useSearchParams();
   const [orderCode, setOrderCode] = useState("");
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [result, setResult] = useState<{
@@ -39,12 +48,19 @@ export function OrderLookupForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    const queryOrderCode = params.get("orderCode");
+    if (queryOrderCode && !orderCode) {
+      setOrderCode(normalizeOrderCodeInput(queryOrderCode));
+    }
+  }, [orderCode, params]);
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
 
     const normalizedCode = normalizeOrderCodeInput(orderCode);
     if (!/^AT-[A-Z0-9]{8}$/.test(normalizedCode)) {
-      setError("Order code must be in the format AT-XXXXXXXX.");
+      setError("Order code should be in this format: AT-XXXXXXXX.");
       return;
     }
 
@@ -53,12 +69,7 @@ export function OrderLookupForm() {
     setResult(null);
 
     try {
-      const response = await fetch("/api/orders/lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderCode: normalizedCode, emailOrPhone })
-      });
-      const payload = (await response.json()) as {
+      const payload = await requestJson<{
         error?: string;
         order?: {
           orderCode: string;
@@ -73,15 +84,23 @@ export function OrderLookupForm() {
           qty: number;
           line_total: number;
         }>;
-      };
+      }>(
+        "/api/orders/lookup",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderCode: normalizedCode, emailOrPhone })
+        },
+        { context: "order_lookup", timeoutMs: 12_000 }
+      );
 
-      if (!response.ok || !payload.order || !payload.items) {
-        throw new Error(payload.error ?? "Could not find order");
+      if (!payload.order || !payload.items) {
+        throw new Error(MESSAGES.orders.lookupNotFound);
       }
 
       setResult({ order: payload.order, items: payload.items });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Lookup failed");
+      setError(mapUnknownError(caught, "order_lookup").userMessage);
     } finally {
       setBusy(false);
     }
@@ -125,7 +144,20 @@ export function OrderLookupForm() {
             required
           />
         </div>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? (
+          <InlineNotice
+            type="error"
+            title={error}
+            description={MESSAGES.common.retry}
+            actionLabel="Try again"
+            onAction={() => {
+              if (!busy) {
+                const form = document.getElementById("orderCode");
+                form?.focus();
+              }
+            }}
+          />
+        ) : null}
         <Button className="w-full" type="submit" disabled={busy}>
           {busy ? (
             <span className="inline-flex items-center gap-2">
@@ -139,22 +171,22 @@ export function OrderLookupForm() {
       </form>
 
       {busy && !result ? (
-        <div className="premium-card space-y-3 p-6" aria-live="polite" aria-busy="true">
-          <Skeleton className="h-7 w-36" />
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-4 w-32" />
-          <div className="space-y-2 pt-1">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-11/12" />
-            <Skeleton className="h-4 w-4/5" />
-          </div>
-        </div>
+        <LoadingState
+          label="Checking your order..."
+          className="premium-card space-y-3 p-6"
+        />
       ) : null}
 
       {result ? (
         <div className="premium-card p-6">
           <h3 className="font-heading text-xl text-primary">{result.order.orderCode}</h3>
           <p className="mt-1 text-sm text-muted-foreground">Status: {result.order.status}</p>
+          {result.order.status === "delivered" ? (
+            <p className="mt-1 text-sm text-green-700">{MESSAGES.orders.statusDelivered}</p>
+          ) : null}
+          {["paid", "processing", "dispatched"].includes(result.order.status) ? (
+            <p className="mt-1 text-sm text-muted-foreground">{MESSAGES.orders.statusProcessing}</p>
+          ) : null}
           <p className="text-sm text-muted-foreground">
             Total: {formatCurrency(result.order.total, result.order.currency)}
           </p>
@@ -168,6 +200,19 @@ export function OrderLookupForm() {
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {!busy && !result && !error ? (
+        <EmptyState
+          title="Track your order"
+          description="Enter your order code and checkout email/phone to get live status."
+        />
+      ) : null}
+
+      {error ? (
+        <div className="flex justify-end">
+          <RetryButton onClick={() => setError(null)} />
         </div>
       ) : null}
     </div>

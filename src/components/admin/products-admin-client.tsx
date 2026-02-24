@@ -3,11 +3,14 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
+import { useToast } from "@/components/feedback/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { MESSAGES } from "@/lib/messages";
 
 type Product = {
   id: string;
@@ -63,6 +66,7 @@ export function ProductsAdminClient() {
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const toast = useToast();
 
   const defaultCategory = categories[0]?.id ?? "";
 
@@ -198,6 +202,7 @@ export function ProductsAdminClient() {
               category_id: defaultCategory
             });
             await load();
+            toast.success(MESSAGES.admin.productCreated);
           } catch (caught) {
             setError(caught instanceof Error ? caught.message : "Unable to create product");
           } finally {
@@ -286,7 +291,7 @@ export function ProductsAdminClient() {
         </div>
       </form>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <InlineNotice type="error" title={error} /> : null}
 
       <div className="space-y-3">
         {productRows.map((product) => (
@@ -401,6 +406,7 @@ export function ProductsAdminClient() {
                       return;
                     }
                     await load();
+                    toast.success(MESSAGES.admin.productUpdated);
                   } catch (caught) {
                     setError(caught instanceof Error ? caught.message : "Unable to update product");
                   } finally {
@@ -445,6 +451,8 @@ export function ProductsAdminClient() {
                       const uploadPayload = (await uploadResponse.json()) as { error?: string };
                       if (!uploadResponse.ok) {
                         setError(uploadPayload.error ?? "Unable to upload image");
+                      } else {
+                        toast.success(MESSAGES.admin.imageUploaded);
                       }
                     } catch (caught) {
                       setError(caught instanceof Error ? caught.message : "Unable to upload image");
@@ -482,6 +490,7 @@ export function ProductsAdminClient() {
                       return;
                     }
                     await load();
+                    toast.success(MESSAGES.admin.productDeleted);
                   } catch (caught) {
                     setError(caught instanceof Error ? caught.message : "Unable to delete product");
                   } finally {

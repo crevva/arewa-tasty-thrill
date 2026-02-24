@@ -5,6 +5,7 @@ import { Fraunces, Manrope } from "next/font/google";
 
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
+import { ToastProvider } from "@/components/feedback/toast-provider";
 import { CartProvider } from "@/components/store/cart-provider";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { APP_NAME, APP_TAGLINE } from "@/lib/constants/branding";
@@ -85,13 +86,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${manrope.variable} ${fraunces.variable} font-body antialiased`}>
         <ThemeProvider>
-          <CartProvider>
-            <div className="min-h-screen bg-background text-foreground">
-              <SiteHeader />
-              <main>{children}</main>
-              <SiteFooter />
-            </div>
-          </CartProvider>
+          <ToastProvider>
+            <CartProvider>
+              <div className="min-h-screen bg-background text-foreground">
+                <SiteHeader />
+                <main>{children}</main>
+                <SiteFooter />
+              </div>
+            </CartProvider>
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

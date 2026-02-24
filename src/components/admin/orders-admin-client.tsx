@@ -3,9 +3,12 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
+import { useToast } from "@/components/feedback/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MESSAGES } from "@/lib/messages";
 import { formatCurrency } from "@/lib/utils/cn";
 
 type Order = {
@@ -27,6 +30,7 @@ export function OrdersAdminClient() {
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const toast = useToast();
 
   async function load() {
     const response = await fetch("/api/admin/orders");
@@ -69,7 +73,7 @@ export function OrdersAdminClient() {
 
   return (
     <div className="space-y-3">
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <InlineNotice type="error" title={error} /> : null}
       {orders.map((order) => (
         <article key={order.id} className="premium-card space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -117,6 +121,7 @@ export function OrdersAdminClient() {
                     return;
                   }
                   await load();
+                  toast.success(MESSAGES.admin.orderUpdated);
                 } catch (caught) {
                   setError(caught instanceof Error ? caught.message : "Unable to update order");
                 } finally {

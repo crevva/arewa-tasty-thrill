@@ -1,4 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+
+import { mapUnknownError } from "@/lib/errorMapper";
+import { logServerError } from "@/lib/logger";
 
 export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json(data, init);
@@ -16,7 +20,20 @@ export function forbidden(message = "Forbidden") {
   return NextResponse.json({ error: message }, { status: 403 });
 }
 
-export function internalError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Internal server error";
-  return NextResponse.json({ error: message }, { status: 500 });
+export function internalError(
+  error: unknown,
+  options?: {
+    userMessage?: string;
+    context?: Record<string, unknown>;
+    status?: number;
+  }
+) {
+  const mapped = mapUnknownError(error, "general");
+  const requestId = randomUUID();
+  logServerError(error, { requestId, ...(options?.context ?? {}) });
+
+  return NextResponse.json(
+    { error: options?.userMessage ?? mapped.userMessage, requestId },
+    { status: options?.status ?? mapped.status ?? 500 }
+  );
 }

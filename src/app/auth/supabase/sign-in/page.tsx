@@ -4,10 +4,12 @@ import { FormEvent, Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MESSAGES } from "@/lib/messages";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 function SupabaseSignInContent() {
@@ -35,12 +37,12 @@ function SupabaseSignInContent() {
       });
 
       if (signInError) {
-        setError(signInError.message);
+        setError("We couldn’t send your sign-in link. Please try again.");
       } else {
-        setMessage("Magic link sent. Please check your inbox.");
+        setMessage(MESSAGES.auth.magicLinkSent(email));
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to send magic link");
+      setError(caught instanceof Error ? caught.message : "We couldn’t send your sign-in link. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -58,6 +60,8 @@ function SupabaseSignInContent() {
           redirectTo: callbackUrl
         }
       });
+    } catch {
+      setError(MESSAGES.auth.googleFailed);
     } finally {
       setBusy(false);
     }
@@ -100,8 +104,8 @@ function SupabaseSignInContent() {
               "Continue with Google"
             )}
           </Button>
-          {message ? <p className="text-sm text-green-700">{message}</p> : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {message ? <InlineNotice type="success" title={message} /> : null}
+          {error ? <InlineNotice type="error" title={error} /> : null}
         </CardContent>
       </Card>
     </section>

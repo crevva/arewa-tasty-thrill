@@ -1,6 +1,6 @@
 import { getPaymentProvider } from "@/payments";
 import type { PaymentProviderName } from "@/payments/types";
-import { internalError, ok } from "@/lib/utils/http";
+import { badRequest, internalError, ok } from "@/lib/utils/http";
 import { applyWebhookEvent } from "@/server/orders/service";
 
 function parseProvider(provider: string): PaymentProviderName {
@@ -15,6 +15,9 @@ export async function POST(
   context: { params: { provider: string } }
 ) {
   try {
+    if (!["paystack", "flutterwave", "stripe", "paypal"].includes(context.params.provider)) {
+      return badRequest("Unsupported payment provider.");
+    }
     const providerName = parseProvider(context.params.provider);
     const provider = getPaymentProvider(providerName);
 
@@ -28,6 +31,9 @@ export async function POST(
 
     return ok({ ok: true, duplicated: result.duplicated, orderCode: result.orderCode });
   } catch (error) {
-    return internalError(error);
+    return internalError(error, {
+      userMessage: "Webhook processing failed.",
+      context: { route: "webhook", provider: context.params.provider }
+    });
   }
 }

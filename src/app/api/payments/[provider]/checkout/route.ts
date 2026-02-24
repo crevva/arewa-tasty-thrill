@@ -1,4 +1,5 @@
 import type { PaymentProviderName } from "@/payments/types";
+import { MESSAGES } from "@/lib/messages";
 import { badRequest, internalError, ok } from "@/lib/utils/http";
 import { startCheckoutWithProvider } from "@/server/payments/checkout";
 
@@ -14,6 +15,9 @@ export async function POST(
   context: { params: { provider: string } }
 ) {
   try {
+    if (!["paystack", "flutterwave", "stripe", "paypal"].includes(context.params.provider)) {
+      return badRequest("Unsupported payment provider.");
+    }
     const providerName = parseProvider(context.params.provider);
     const body = (await request.json()) as { orderCode?: string };
     if (!body.orderCode) {
@@ -32,9 +36,18 @@ export async function POST(
         error.message === "Order is already paid" ||
         error.message === "Selected payment provider is disabled"
       ) {
-        return badRequest(error.message);
+        if (error.message === "Order not found") {
+          return badRequest("We couldn’t find your order. Please refresh checkout and try again.");
+        }
+        if (error.message === "Order is already paid") {
+          return badRequest("This order has already been paid.");
+        }
+        return badRequest("This payment option is currently unavailable.");
       }
     }
-    return internalError(error);
+    return internalError(error, {
+      userMessage: MESSAGES.checkout.initPaymentFailed,
+      context: { route: "payments_provider_checkout", provider: context.params.provider }
+    });
   }
 }

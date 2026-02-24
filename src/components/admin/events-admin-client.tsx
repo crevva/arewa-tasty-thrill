@@ -3,9 +3,12 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
+import { useToast } from "@/components/feedback/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MESSAGES } from "@/lib/messages";
 
 type EventRequest = {
   id: string;
@@ -25,6 +28,7 @@ export function EventsAdminClient() {
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const toast = useToast();
 
   async function load() {
     const response = await fetch("/api/admin/event-requests");
@@ -63,7 +67,7 @@ export function EventsAdminClient() {
 
   return (
     <div className="space-y-3">
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <InlineNotice type="error" title={error} /> : null}
       {requests.map((request) => (
         <article key={request.id} className="premium-card space-y-3 p-4">
           <div>
@@ -107,6 +111,7 @@ export function EventsAdminClient() {
                     return;
                   }
                   await load();
+                  toast.success(MESSAGES.admin.eventUpdated);
                 } catch (caught) {
                   setError(caught instanceof Error ? caught.message : "Unable to update status");
                 } finally {

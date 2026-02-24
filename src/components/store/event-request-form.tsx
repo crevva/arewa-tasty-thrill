@@ -5,10 +5,13 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { mapUnknownError } from "@/lib/errorMapper";
+import { requestJson } from "@/lib/http/client";
 import { eventRequestSchema } from "@/lib/validators/event-request";
 
 export function EventRequestForm() {
@@ -37,22 +40,24 @@ export function EventRequestForm() {
         setMessage(null);
         setError(null);
         try {
-          const response = await fetch("/api/event-requests", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(values)
-          });
-
-          const payload = (await response.json()) as { id?: string; error?: string };
-          if (!response.ok || !payload.id) {
-            setError(payload.error ?? "Failed to submit request");
+          const payload = await requestJson<{ id?: string }>(
+            "/api/event-requests",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(values)
+            },
+            { context: "general", timeoutMs: 15_000 }
+          );
+          if (!payload.id) {
+            setError("We couldn’t submit your request right now. Please try again.");
             return;
           }
 
           setMessage("Request submitted. Our team will contact you shortly.");
           form.reset();
         } catch (caught) {
-          setError(caught instanceof Error ? caught.message : "Failed to submit request");
+          setError(mapUnknownError(caught, "general").userMessage);
         } finally {
           setBusy(false);
         }
@@ -105,8 +110,8 @@ export function EventRequestForm() {
         <Textarea id="notes" disabled={busy} {...form.register("notes")} />
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {message ? <p className="text-sm text-green-700">{message}</p> : null}
+      {error ? <InlineNotice type="error" title={error} /> : null}
+      {message ? <InlineNotice type="success" title={message} /> : null}
 
       <Button className="w-full" type="submit" disabled={busy}>
         {busy ? (

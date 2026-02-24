@@ -2,28 +2,38 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { PaymentMethodSelector } from "@/components/checkout/PaymentMethodSelector";
+import { EmptyState } from "@/components/feedback/empty-state";
+import { InlineNotice } from "@/components/feedback/inline-notice";
+import { LoadingState } from "@/components/feedback/loading-state";
+import { RetryButton } from "@/components/feedback/retry-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { type AppError } from "@/lib/errors";
+import { mapUnknownError } from "@/lib/errorMapper";
+import { requestJson } from "@/lib/http/client";
+import { MESSAGES } from "@/lib/messages";
 import { checkoutPaymentMethodSchema, type CheckoutPaymentMethod } from "@/lib/validators/checkout";
 import { formatCurrency } from "@/lib/utils/cn";
 import { useCartStore } from "@/state/cart-store";
 
 const checkoutFormSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  phone: z.string().min(7),
-  deliveryZoneId: z.string().uuid(),
-  street: z.string().min(3),
-  area: z.string().min(2),
+  name: z.string().min(2, "Enter your full name."),
+  email: z.string().email(MESSAGES.checkout.emailHelp),
+  phone: z
+    .string()
+    .min(7, MESSAGES.checkout.phoneHelp)
+    .regex(/^[+\d][\d\s\-()]{6,}$/, MESSAGES.checkout.phoneHelp),
+  deliveryZoneId: z.string().uuid(MESSAGES.checkout.zoneRequired),
+  street: z.string().min(3, MESSAGES.checkout.addressHelp),
+  area: z.string().min(2, "Please add your area for delivery."),
   landmark: z.string().optional(),
   notes: z.string().optional(),
   paymentMethod: checkoutPaymentMethodSchema
@@ -63,7 +73,8 @@ export function CheckoutForm(props: {
   const [quote, setQuote] = useState<QuoteState | null>(null);
   const [quoteUpdating, setQuoteUpdating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [quoteError, setQuoteError] = useState<AppError | null>(null);
+  const [submitError, setSubmitError] = useState<AppError | null>(null);
 
   const defaultZoneId = props.zones[0]?.id;
   const defaultPaymentMethod: CheckoutPaymentMethod =
@@ -92,6 +103,7 @@ export function CheckoutForm(props: {
     (props.paymentOptions.showPaypalAlways || quoteCurrency !== "NGN");
   const canPay = props.paymentOptions.cardEnabled || showPaypal;
   const canSubmit = canPay && !!quote && !quoteUpdating;
+  const fieldErrors = form.formState.errors;
 
   const quotePayload = useMemo(
     () => ({
@@ -101,7 +113,7 @@ export function CheckoutForm(props: {
     [items, selectedZoneId]
   );
 
-  useEffect(() => {
+  const refreshQuote = useCallback(async () => {
     if (items.length === 0) {
       setQuote(null);
       setQuoteUpdating(false);
@@ -109,39 +121,47 @@ export function CheckoutForm(props: {
     }
     if (!selectedZoneId) {
       setQuoteUpdating(false);
+      setQuoteError({
+        code: "validation",
+        userMessage: MESSAGES.checkout.zoneRequired
+      });
       return;
     }
 
-    const controller = new AbortController();
-    const run = async () => {
-      setQuoteUpdating(true);
-      const response = await fetch("/api/cart/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(quotePayload),
-        signal: controller.signal
-      });
+    setQuoteUpdating(true);
+    try {
+      const payload = await requestJson<{ quote?: QuoteState }>(
+        "/api/cart/quote",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(quotePayload)
+        },
+        { context: "checkout_quote", timeoutMs: 12_000 }
+      );
 
-      const payload = (await response.json()) as { quote?: QuoteState; error?: string };
-      if (!response.ok || !payload.quote) {
-        setError(payload.error ?? "Unable to calculate quote");
-        return;
+      if (!payload.quote) {
+        throw new Error(MESSAGES.checkout.quoteFailed);
       }
 
       setQuote(payload.quote);
-      setError(null);
-    };
-
-    run().catch((caught) => {
-      if ((caught as Error).name !== "AbortError") {
-        setError("Unable to calculate quote");
-      }
-    }).finally(() => {
+      setQuoteError(null);
+    } catch (caught) {
+      setQuoteError(mapUnknownError(caught, "checkout_quote"));
+    } finally {
       setQuoteUpdating(false);
-    });
+    }
+  }, [items.length, quotePayload, selectedZoneId]);
 
-    return () => controller.abort();
-  }, [quotePayload, items.length, selectedZoneId]);
+  useEffect(() => {
+    if (items.length === 0) {
+      setQuote(null);
+      setQuoteUpdating(false);
+      setQuoteError(null);
+      return;
+    }
+    refreshQuote().catch(() => undefined);
+  }, [items.length, refreshQuote]);
 
   useEffect(() => {
     if (!showPaypal && selectedPaymentMethod === "paypal") {
@@ -154,31 +174,34 @@ export function CheckoutForm(props: {
     }
   }, [form, props.paymentOptions.cardEnabled, selectedPaymentMethod, showPaypal]);
 
-  const payButtonLabel = quote
-    ? `Pay ${formatCurrency(quote.total, quote.currency)}`
-    : "Calculating total...";
+  const payButtonLabel = submitting
+    ? MESSAGES.checkout.payButtonLoading
+    : canSubmit && quote
+      ? MESSAGES.checkout.payButtonDefault(formatCurrency(quote.total, quote.currency))
+      : MESSAGES.checkout.payButtonDisabled;
 
   async function startPayment(
     orderCode: string,
     paymentMethod: CheckoutPaymentMethod
   ): Promise<{ checkoutUrl: string; provider?: string }> {
-    const paymentResponse = await fetch("/api/payments/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orderCode,
-        paymentMethod
-      })
-    });
-
-    const paymentPayload = (await paymentResponse.json()) as {
+    const paymentPayload = await requestJson<{
       checkoutUrl?: string;
       provider?: string;
-      error?: string;
-    };
+    }>(
+      "/api/payments/checkout",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderCode,
+          paymentMethod
+        })
+      },
+      { context: "payment_init", timeoutMs: 15_000 }
+    );
 
-    if (!paymentResponse.ok || !paymentPayload.checkoutUrl) {
-      throw new Error(paymentPayload.error ?? "Could not initialize payment");
+    if (!paymentPayload.checkoutUrl) {
+      throw new Error("Payment checkout URL missing from server response.");
     }
 
     return {
@@ -189,51 +212,61 @@ export function CheckoutForm(props: {
 
   async function onSubmit(values: CheckoutFormInput) {
     if (!items.length) {
-      setError("Your cart is empty.");
+      setSubmitError({
+        code: "validation",
+        userMessage: MESSAGES.checkout.emptyCart
+      });
       return;
     }
     if (!canPay) {
-      setError("No payment method is currently available. Please try again later.");
+      setSubmitError({
+        code: "payment_init_failed",
+        userMessage: "No payment method is currently available. Please try again later."
+      });
       return;
     }
     if (!quote) {
-      setError("Please wait while we calculate your total.");
+      setSubmitError({
+        code: "validation",
+        userMessage: "Please wait while we calculate your total."
+      });
       return;
     }
 
     setSubmitting(true);
-    setError(null);
+    setSubmitError(null);
 
     try {
-      const orderResponse = await fetch("/api/checkout/order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customer: {
-            name: values.name,
-            email: values.email,
-            phone: values.phone
-          },
-          deliveryZoneId: values.deliveryZoneId,
-          items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
-          address: {
-            street: values.street,
-            area: values.area,
-            landmark: values.landmark,
-            notes: values.notes
-          },
-          paymentMethod: values.paymentMethod
-        })
-      });
-
-      const orderPayload = (await orderResponse.json()) as {
+      const orderPayload = await requestJson<{
         orderCode?: string;
         paymentMethod?: CheckoutPaymentMethod;
-        error?: string;
-      };
+      }>(
+        "/api/checkout/order",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customer: {
+              name: values.name,
+              email: values.email,
+              phone: values.phone
+            },
+            deliveryZoneId: values.deliveryZoneId,
+            items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+            address: {
+              street: values.street,
+              area: values.area,
+              landmark: values.landmark,
+              notes: values.notes
+            },
+            paymentMethod: values.paymentMethod
+          })
+        },
+        { context: "checkout_order", timeoutMs: 15_000 }
+      );
 
-      if (!orderResponse.ok || !orderPayload.orderCode) {
-        throw new Error(orderPayload.error ?? "Could not create order");
+      if (!orderPayload.orderCode) {
+        throw new Error("Order code missing from server response.");
       }
 
       const paymentPayload = await startPayment(orderPayload.orderCode, values.paymentMethod);
@@ -241,7 +274,7 @@ export function CheckoutForm(props: {
       clearCart();
       window.location.href = paymentPayload.checkoutUrl;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Checkout failed");
+      setSubmitError(mapUnknownError(caught, "payment_init"));
       setSubmitting(false);
       return;
     }
@@ -251,12 +284,14 @@ export function CheckoutForm(props: {
 
   if (!items.length) {
     return (
-      <div className="premium-card p-8">
-        <p className="text-muted-foreground">Your cart is empty.</p>
-        <Link className="mt-3 inline-block text-sm font-semibold text-primary" href="/shop">
-          Continue shopping
-        </Link>
-      </div>
+      <EmptyState
+        title="Your cart is empty"
+        description="Add your favourites from the shop to continue."
+        actionLabel="Continue shopping"
+        onAction={() => {
+          window.location.href = "/shop";
+        }}
+      />
     );
   }
 
@@ -269,16 +304,29 @@ export function CheckoutForm(props: {
           <div className="space-y-2">
             <Label htmlFor="name">Full name</Label>
             <Input id="name" {...form.register("name")} />
+            {fieldErrors.name?.message ? (
+              <p className="text-xs text-destructive">{fieldErrors.name.message}</p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Phone</Label>
             <Input id="phone" type="tel" inputMode="tel" autoComplete="tel" {...form.register("phone")} />
+            {fieldErrors.phone?.message ? (
+              <p className="text-xs text-destructive">{fieldErrors.phone.message}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">{MESSAGES.checkout.phoneHelp}</p>
+            )}
           </div>
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" {...form.register("email")} />
+          {fieldErrors.email?.message ? (
+            <p className="text-xs text-destructive">{fieldErrors.email.message}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">{MESSAGES.checkout.emailHelp}</p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -290,17 +338,28 @@ export function CheckoutForm(props: {
               </option>
             ))}
           </Select>
+          {fieldErrors.deliveryZoneId?.message ? (
+            <p className="text-xs text-destructive">{fieldErrors.deliveryZoneId.message}</p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="street">Street address</Label>
           <Input id="street" {...form.register("street")} />
+          {fieldErrors.street?.message ? (
+            <p className="text-xs text-destructive">{fieldErrors.street.message}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">{MESSAGES.checkout.addressHelp}</p>
+          )}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="area">Area</Label>
             <Input id="area" {...form.register("area")} />
+            {fieldErrors.area?.message ? (
+              <p className="text-xs text-destructive">{fieldErrors.area.message}</p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="landmark">Landmark (optional)</Label>
@@ -344,26 +403,56 @@ export function CheckoutForm(props: {
             <span>Total</span>
             <span className="text-lg font-bold text-primary">{quote ? formatCurrency(quote.total, quote.currency) : "..."}</span>
           </div>
-          {quoteUpdating ? <p className="mt-2 text-xs text-muted-foreground">Updating quote...</p> : null}
+          {quoteUpdating ? (
+            <div className="mt-2">
+              <LoadingState label={MESSAGES.checkout.quoteUpdating} className="border-0 p-0 shadow-none" />
+            </div>
+          ) : null}
         </div>
 
         {!canPay ? (
-          <p className="text-sm text-destructive">
-            No payment method is currently available. Please contact support.
-          </p>
+          <InlineNotice
+            type="error"
+            title="Payment is currently unavailable"
+            description="Please try again shortly or contact support."
+          />
         ) : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {quoteError ? (
+          <InlineNotice
+            type="error"
+            title={quoteError.userMessage}
+            description={quoteError.retryable ? MESSAGES.common.retry : undefined}
+            actionLabel={quoteError.retryable ? "Retry quote" : undefined}
+            onAction={quoteError.retryable ? () => refreshQuote().catch(() => undefined) : undefined}
+          />
+        ) : null}
+        {submitError ? (
+          <InlineNotice
+            type="error"
+            title={submitError.userMessage}
+            description={submitError.retryable ? MESSAGES.common.contactSupport : undefined}
+          />
+        ) : null}
 
         <Button className="w-full" type="submit" disabled={submitting || !canSubmit} aria-busy={submitting}>
           {submitting ? (
             <span className="inline-flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              Initializing payment...
+              {MESSAGES.checkout.payButtonLoading}
             </span>
           ) : (
             payButtonLabel
           )}
         </Button>
+        {submitError?.retryable ? (
+          <div className="flex justify-end">
+            <RetryButton
+              onClick={() => form.handleSubmit(onSubmit)()}
+              disabled={submitting}
+              label="Retry payment"
+            />
+          </div>
+        ) : null}
       </section>
     </form>
   );

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useToast } from "@/components/feedback/toast-provider";
 import { Button } from "@/components/ui/button";
 import { useCartStore } from "@/state/cart-store";
 
@@ -14,6 +15,7 @@ export function AddToCartButton(props: {
 }) {
   const addItem = useCartStore((state) => state.addItem);
   const [added, setAdded] = useState(false);
+  const toast = useToast();
 
   return (
     <Button
@@ -30,6 +32,7 @@ export function AddToCartButton(props: {
           1
         );
         setAdded(true);
+        toast.success(`${props.name} added to cart`, "You can review your order in cart anytime.");
         window.setTimeout(() => setAdded(false), 1000);
       }}
     >

@@ -3,9 +3,12 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { InlineNotice } from "@/components/feedback/inline-notice";
+import { useToast } from "@/components/feedback/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MESSAGES } from "@/lib/messages";
 
 type Category = {
   id: string;
@@ -20,6 +23,7 @@ export function CategoriesAdminClient() {
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const toast = useToast();
 
   async function load() {
     const response = await fetch("/api/admin/categories");
@@ -86,6 +90,7 @@ export function CategoriesAdminClient() {
             setName("");
             setSlug("");
             await load();
+            toast.success(MESSAGES.admin.categoryCreated);
           } catch (caught) {
             setError(caught instanceof Error ? caught.message : "Unable to create category");
           } finally {
@@ -119,7 +124,7 @@ export function CategoriesAdminClient() {
         </Button>
       </form>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <InlineNotice type="error" title={error} /> : null}
 
       <div className="space-y-2">
         {categories.map((category) => (
@@ -163,6 +168,7 @@ export function CategoriesAdminClient() {
                     return;
                   }
                   await load();
+                  toast.success(MESSAGES.admin.categoryUpdated);
                 } catch (caught) {
                   setError(caught instanceof Error ? caught.message : "Unable to update category");
                 } finally {
@@ -197,6 +203,7 @@ export function CategoriesAdminClient() {
                     return;
                   }
                   await load();
+                  toast.success(MESSAGES.admin.categoryDeleted);
                 } catch (caught) {
                   setError(caught instanceof Error ? caught.message : "Unable to delete category");
                 } finally {

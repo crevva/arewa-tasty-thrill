@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 
+import { EmptyState } from "@/components/feedback/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils/cn";
 import { useCartStore } from "@/state/cart-store";
@@ -17,10 +18,10 @@ export function CartTable() {
 
   if (!items.length) {
     return (
-      <div className="premium-card p-8 text-center">
-        <h2 className="font-heading text-2xl text-primary">Your cart is empty</h2>
-        <p className="mt-2 text-muted-foreground">Add some thrill to your basket from the shop.</p>
-      </div>
+      <EmptyState
+        title="Your cart is empty"
+        description="Add some thrill to your basket from the shop."
+      />
     );
   }
 

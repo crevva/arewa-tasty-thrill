@@ -37,6 +37,20 @@ Premium ecommerce webapp for **Arewa Tasty Thrill** built with Next.js App Route
   - `src/components/theme/theme-toggle.tsx`
 - To retune colors, update only CSS variables in `src/app/globals.css` rather than hardcoding component colors.
 
+## Error Handling & Message Patterns
+- Shared copy lives in `src/lib/messages.ts`.
+- Shared error contracts and mapping live in:
+  - `src/lib/errors.ts`
+  - `src/lib/errorMapper.ts`
+  - `src/lib/http/client.ts`
+- Server routes return safe user-facing messages (no raw stack traces), while logging structured context through `src/lib/logger.ts`.
+- Feedback UI patterns:
+  - Inline blocking notices: `src/components/feedback/inline-notice.tsx`
+  - Empty states: `src/components/feedback/empty-state.tsx`
+  - Loading states: `src/components/feedback/loading-state.tsx`
+  - Retry actions: `src/components/feedback/retry-button.tsx`
+  - Transient toasts: `src/components/feedback/toast-provider.tsx`
+
 ## Project Structure
 - `src/auth`: provider-agnostic auth interface + adapters
 - `src/storage`: storage interface + Supabase/local providers

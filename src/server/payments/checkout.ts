@@ -30,7 +30,7 @@ export async function startCheckoutWithProvider(input: StartCheckoutWithProvider
     amount: order.total,
     currency: order.currency,
     customerEmail: order.guest_email ?? "guest@atthrill.local",
-    callbackUrl: `${env.APP_BASE_URL}/order-success?orderCode=${encodeURIComponent(order.order_code)}&provider=${input.providerName}`,
+    callbackUrl: `${env.APP_BASE_URL}/payment/callback?orderCode=${encodeURIComponent(order.order_code)}&provider=${input.providerName}`,
     metadata: {
       orderId: order.id
     }
@@ -54,4 +54,3 @@ export async function startCheckoutWithProvider(input: StartCheckoutWithProvider
     provider: input.providerName
   };
 }
-

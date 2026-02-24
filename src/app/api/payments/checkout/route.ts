@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { mapZodError } from "@/lib/errorMapper";
+import { MESSAGES } from "@/lib/messages";
 import { badRequest, internalError, ok } from "@/lib/utils/http";
 import { checkoutPaymentMethodInputSchema } from "@/lib/validators/checkout";
 import { getEnabledPaymentProviders, resolveCardPaymentProvider } from "@/payments";
@@ -15,7 +17,8 @@ export async function POST(request: Request) {
     const payload = await request.json();
     const parsed = startPaymentSchema.safeParse(payload);
     if (!parsed.success) {
-      return badRequest(parsed.error.issues[0]?.message ?? "Invalid payment payload");
+      const validationError = mapZodError(parsed.error, "Payment details are incomplete.");
+      return badRequest(validationError.userMessage);
     }
 
     const providerName =
@@ -24,7 +27,7 @@ export async function POST(request: Request) {
         : resolveCardPaymentProvider();
 
     if (parsed.data.paymentMethod === "paypal" && !getEnabledPaymentProviders().includes("paypal")) {
-      return badRequest("PayPal payments are not available right now");
+      return badRequest("PayPal is not available right now. Please use Pay Online.");
     }
 
     const checkout = await startCheckoutWithProvider({
@@ -45,10 +48,19 @@ export async function POST(request: Request) {
         error.message === "Selected payment provider is disabled" ||
         error.message === "No card payment provider is enabled"
       ) {
-        return badRequest(error.message);
+        if (error.message === "Order not found") {
+          return badRequest("We couldn’t find your order. Please refresh checkout and try again.");
+        }
+        if (error.message === "Order is already paid") {
+          return badRequest("This order has already been paid.");
+        }
+        return badRequest("Online payment is not available right now. Please try again shortly.");
       }
     }
 
-    return internalError(error);
+    return internalError(error, {
+      userMessage: MESSAGES.checkout.initPaymentFailed,
+      context: { route: "payments_checkout" }
+    });
   }
 }

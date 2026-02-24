@@ -1,5 +1,6 @@
 import { getSession } from "@/auth";
 import { getDb } from "@/lib/db";
+import { mapZodError } from "@/lib/errorMapper";
 import { eventRequestSchema } from "@/lib/validators/event-request";
 import { badRequest, internalError, ok } from "@/lib/utils/http";
 
@@ -9,7 +10,8 @@ export async function POST(request: Request) {
     const parsed = eventRequestSchema.safeParse(payload);
 
     if (!parsed.success) {
-      return badRequest(parsed.error.issues[0]?.message ?? "Invalid payload");
+      const validationError = mapZodError(parsed.error, "Please check your event details and try again.");
+      return badRequest(validationError.userMessage);
     }
 
     const session = await getSession();
@@ -32,6 +34,9 @@ export async function POST(request: Request) {
 
     return ok({ id: row.id });
   } catch (error) {
-    return internalError(error);
+    return internalError(error, {
+      userMessage: "We couldn’t submit your event request right now. Please try again.",
+      context: { route: "event_requests_create" }
+    });
   }
 }
