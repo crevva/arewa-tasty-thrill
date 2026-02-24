@@ -9,10 +9,5 @@ export default async function AdminProductsPage() {
     redirect("/admin");
   }
 
-  return (
-    <div className="space-y-5">
-      <h1 className="h1">Products</h1>
-      <ProductsAdminClient />
-    </div>
-  );
+  return <ProductsAdminClient />;
 }

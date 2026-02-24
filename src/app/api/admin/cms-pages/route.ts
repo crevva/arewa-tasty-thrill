@@ -3,20 +3,70 @@ import {
   isBackofficeAccessError,
   requireBackofficeSession
 } from "@/lib/security/admin";
+import {
+  buildPaginationMeta,
+  parsePage,
+  parsePageSize
+} from "@/lib/utils/pagination";
 import { cmsPageSchema } from "@/lib/validators/admin";
 import { badRequest, forbidden, internalError, ok } from "@/lib/utils/http";
 import { writeAuditLog } from "@/server/admin/audit";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await requireBackofficeSession("admin");
-    const pages = await getDb().selectFrom("cms_pages").selectAll().orderBy("slug asc").execute();
-    return ok({ pages });
+    const searchParams = new URL(request.url).searchParams;
+    const page = parsePage(searchParams);
+    const pageSize = parsePageSize(searchParams);
+    const q = searchParams.get("q")?.trim() ?? "";
+    const sort = searchParams.get("sort") ?? "slug_asc";
+
+    const db = getDb();
+    const baseQuery = db
+      .selectFrom("cms_pages")
+      .$if(Boolean(q), (query) =>
+        query.where((eb) =>
+          eb.or([
+            eb("cms_pages.slug", "ilike", `%${q}%`),
+            eb("cms_pages.title", "ilike", `%${q}%`)
+          ])
+        )
+      );
+
+    const totalRow = await baseQuery
+      .select(({ fn }) => fn.count<string>("cms_pages.id").as("total"))
+      .executeTakeFirst();
+    const total = Number(totalRow?.total ?? 0);
+    const pagination = buildPaginationMeta({ page, pageSize, total });
+
+    let dataQuery = baseQuery.selectAll();
+    if (sort === "title_asc") {
+      dataQuery = dataQuery.orderBy("title asc");
+    } else if (sort === "title_desc") {
+      dataQuery = dataQuery.orderBy("title desc");
+    } else {
+      dataQuery = dataQuery.orderBy("slug asc");
+    }
+
+    const items = await dataQuery
+      .limit(pagination.pageSize)
+      .offset(pagination.offset)
+      .execute();
+
+    return ok({
+      items,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      total: pagination.total,
+      totalPages: pagination.totalPages,
+      from: pagination.from,
+      to: pagination.to
+    });
   } catch (error) {
     if (isBackofficeAccessError(error)) {
       return forbidden();
     }
-    return internalError(error);
+    return internalError(error, { context: { route: "admin_cms_pages_get" } });
   }
 }
 
@@ -62,6 +112,6 @@ export async function PUT(request: Request) {
     if (isBackofficeAccessError(error)) {
       return forbidden();
     }
-    return internalError(error);
+    return internalError(error, { context: { route: "admin_cms_pages_put" } });
   }
 }

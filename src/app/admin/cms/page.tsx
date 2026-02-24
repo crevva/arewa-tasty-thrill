@@ -9,10 +9,5 @@ export default async function AdminCmsPage() {
     redirect("/admin");
   }
 
-  return (
-    <div className="space-y-5">
-      <h1 className="h1">CMS Pages</h1>
-      <CmsAdminClient />
-    </div>
-  );
+  return <CmsAdminClient />;
 }

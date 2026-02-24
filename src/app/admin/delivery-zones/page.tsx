@@ -9,10 +9,5 @@ export default async function AdminDeliveryZonesPage() {
     redirect("/admin");
   }
 
-  return (
-    <div className="space-y-5">
-      <h1 className="h1">Delivery Zones</h1>
-      <ZonesAdminClient />
-    </div>
-  );
+  return <ZonesAdminClient />;
 }

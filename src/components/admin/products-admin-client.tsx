@@ -1,18 +1,32 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
+import { AdminPageShell } from "@/components/admin/AdminPageShell";
+import { AdminDataTable } from "@/components/admin/data-table/AdminDataTable";
+import { ConfirmDialog } from "@/components/admin/data-table/ConfirmDialog";
+import { DrawerFormShell } from "@/components/admin/data-table/DrawerFormShell";
+import { useAdminTableQuery } from "@/components/admin/data-table/useAdminTableQuery";
+import type { PaginatedResponse, TableColumn } from "@/components/admin/data-table/types";
 import { InlineNotice } from "@/components/feedback/inline-notice";
 import { useToast } from "@/components/feedback/toast-provider";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { requestJson } from "@/lib/http/client";
 import { MESSAGES } from "@/lib/messages";
+import { formatCurrency, slugify } from "@/lib/utils/cn";
 
-type Product = {
+type ProductRow = {
   id: string;
   name: string;
   slug: string;
@@ -22,6 +36,9 @@ type Product = {
   in_stock: boolean;
   category_id: string;
   category_name: string;
+  created_at: string;
+  thumbnail_storage_path: string | null;
+  thumbnail_url: string | null;
 };
 
 type Category = {
@@ -30,7 +47,17 @@ type Category = {
   slug: string;
 };
 
-const DEFAULT_NAIRA_INPUT = "0.00";
+const productFormSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters."),
+  slug: z.string().min(2, "Slug must be at least 2 characters."),
+  description: z.string().min(6, "Description must be at least 6 characters."),
+  basePriceNaira: z.string().min(1, "Price is required."),
+  categoryId: z.string().uuid("Select a valid category."),
+  active: z.boolean(),
+  inStock: z.boolean()
+});
+
+type ProductFormValues = z.infer<typeof productFormSchema>;
 
 function sanitizeMoneyInput(value: string) {
   const cleaned = value.replace(/[^0-9.]/g, "");
@@ -59,458 +86,626 @@ function formatKoboToNaira(value: number) {
   return (value / 100).toFixed(2);
 }
 
+function buildProductsUrl(queryString: string) {
+  return queryString ? `/api/admin/products?${queryString}` : "/api/admin/products";
+}
+
 export function ProductsAdminClient() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [busyKey, setBusyKey] = useState<string | null>(null);
   const toast = useToast();
+  const query = useAdminTableQuery({ defaultPageSize: 10, defaultSort: "newest" });
 
-  const defaultCategory = categories[0]?.id ?? "";
+  const [rows, setRows] = useState<ProductRow[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [meta, setMeta] = useState({
+    page: 1,
+    pageSize: 10,
+    total: 0,
+    totalPages: 1,
+    from: 0,
+    to: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [form, setForm] = useState({
-    name: "",
-    slug: "",
-    description: "",
-    base_price: DEFAULT_NAIRA_INPUT,
-    active: true,
-    in_stock: true,
-    category_id: ""
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editing, setEditing] = useState<ProductRow | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [deleteTarget, setDeleteTarget] = useState<ProductRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const activeFilter = query.getFilter("active");
+  const stockFilter = query.getFilter("inStock");
+  const categoryFilter = query.getFilter("categoryId");
+
+  const form = useForm<ProductFormValues>({
+    resolver: zodResolver(productFormSchema),
+    defaultValues: {
+      name: "",
+      slug: "",
+      description: "",
+      basePriceNaira: "",
+      categoryId: "",
+      active: true,
+      inStock: true
+    }
   });
 
-  async function load() {
-    const [productsRes, categoriesRes] = await Promise.all([
-      fetch("/api/admin/products"),
-      fetch("/api/admin/categories")
-    ]);
-
-    const productPayload = (await productsRes.json()) as { products?: Product[]; error?: string };
-    const categoryPayload = (await categoriesRes.json()) as { categories?: Category[]; error?: string };
-
-    if (!productsRes.ok || !categoryPayload.categories || !productPayload.products) {
-      setError(productPayload.error ?? categoryPayload.error ?? "Unable to load data");
-      return;
-    }
-
-    setProducts(productPayload.products);
-    setPriceDrafts(
-      Object.fromEntries(
-        productPayload.products.map((product) => [product.id, formatKoboToNaira(product.base_price)])
-      )
+  const loadCategories = useCallback(async () => {
+    const payload = await requestJson<PaginatedResponse<Category>>(
+      "/api/admin/categories?page=1&pageSize=50&sort=name_asc",
+      { method: "GET" },
+      { context: "admin" }
     );
-    setCategories(categoryPayload.categories);
-  }
-
-  useEffect(() => {
-    load()
-      .catch(() => setError("Unable to load products"))
-      .finally(() => setInitialLoading(false));
+    setCategories(payload.items);
   }, []);
 
-  useEffect(() => {
-    if (!form.category_id && defaultCategory) {
-      setForm((current) => ({ ...current, category_id: defaultCategory }));
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await requestJson<PaginatedResponse<ProductRow>>(
+        buildProductsUrl(query.queryString),
+        { method: "GET" },
+        { context: "admin" }
+      );
+      setRows(payload.items);
+      setMeta({
+        page: payload.page,
+        pageSize: payload.pageSize,
+        total: payload.total,
+        totalPages: payload.totalPages,
+        from: payload.from ?? (payload.total ? (payload.page - 1) * payload.pageSize + 1 : 0),
+        to: payload.to ?? Math.min(payload.page * payload.pageSize, payload.total)
+      });
+    } catch (caught) {
+      setError((caught as Error).message ?? "Could not load products.");
+    } finally {
+      setLoading(false);
     }
-  }, [defaultCategory, form.category_id]);
+  }, [query.queryString]);
 
-  function setProductPriceDraft(productId: string, rawValue: string) {
-    const sanitized = sanitizeMoneyInput(rawValue);
-    setPriceDrafts((current) => ({ ...current, [productId]: sanitized }));
+  useEffect(() => {
+    loadCategories().catch((caught) => {
+      setError((caught as Error).message ?? "Could not load categories.");
+    });
+  }, [loadCategories]);
 
-    setProducts((rows) =>
-      rows.map((row) =>
-        row.id === productId
-          ? { ...row, base_price: parseNairaToKobo(sanitized || "0") }
-          : row
-      )
-    );
+  useEffect(() => {
+    loadProducts().catch((caught) => {
+      setError((caught as Error).message ?? "Could not load products.");
+    });
+  }, [loadProducts]);
+
+  const openCreateDrawer = useCallback(() => {
+    setEditing(null);
+    form.reset({
+      name: "",
+      slug: "",
+      description: "",
+      basePriceNaira: "",
+      categoryId: categories[0]?.id ?? "",
+      active: true,
+      inStock: true
+    });
+    setDrawerOpen(true);
+  }, [categories, form]);
+
+  const openEditDrawer = useCallback((row: ProductRow) => {
+    setEditing(row);
+    form.reset({
+      name: row.name,
+      slug: row.slug,
+      description: row.description,
+      basePriceNaira: formatKoboToNaira(row.base_price),
+      categoryId: row.category_id,
+      active: row.active,
+      inStock: row.in_stock
+    });
+    setDrawerOpen(true);
+  }, [form]);
+
+  async function onSubmit(values: ProductFormValues) {
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        name: values.name,
+        slug: values.slug,
+        description: values.description,
+        base_price: parseNairaToKobo(values.basePriceNaira),
+        active: values.active,
+        in_stock: values.inStock,
+        category_id: values.categoryId
+      };
+
+      if (editing) {
+        await requestJson<{ product: ProductRow }>(
+          "/api/admin/products",
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: editing.id, ...payload })
+          },
+          { context: "admin" }
+        );
+        toast.success(MESSAGES.admin.productUpdated);
+      } else {
+        await requestJson<{ product: ProductRow }>(
+          "/api/admin/products",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          },
+          { context: "admin" }
+        );
+        toast.success(MESSAGES.admin.productCreated);
+      }
+
+      setDrawerOpen(false);
+      await loadProducts();
+    } catch (caught) {
+      const message = (caught as Error).message ?? MESSAGES.admin.saveFailed;
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  const productRows = useMemo(() => products, [products]);
+  async function handleDelete() {
+    if (!deleteTarget) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      await requestJson<{ ok: boolean }>(
+        "/api/admin/products",
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: deleteTarget.id })
+        },
+        { context: "admin" }
+      );
 
-  function isRowBusy(productId: string) {
-    return (
-      busyKey === `save:${productId}` ||
-      busyKey === `upload:${productId}` ||
-      busyKey === `delete:${productId}`
-    );
+      toast.success(MESSAGES.admin.productDeleted);
+      setDeleteTarget(null);
+      await loadProducts();
+    } catch (caught) {
+      const message = (caught as Error).message ?? MESSAGES.admin.saveFailed;
+      setError(message);
+      toast.error(message);
+    } finally {
+      setDeleting(false);
+    }
   }
 
-  if (initialLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="premium-card grid gap-3 p-4 md:grid-cols-2">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className="h-10 w-full rounded-md" />
-          ))}
-          <Skeleton className="h-10 w-40 rounded-md md:col-span-2" />
-        </div>
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="premium-card space-y-3 p-4">
-              <div className="grid gap-2 md:grid-cols-2">
-                {Array.from({ length: 6 }).map((__, innerIndex) => (
-                  <Skeleton key={innerIndex} className="h-10 w-full rounded-md" />
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Skeleton className="h-10 w-20 rounded-md" />
-                <Skeleton className="h-10 w-28 rounded-md" />
-                <Skeleton className="h-10 w-24 rounded-md" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+  async function uploadImage(productId: string, file: File) {
+    setUploadingImage(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("productId", productId);
+
+      await requestJson<{ storagePath: string; publicUrl: string }>(
+        "/api/admin/products/upload",
+        {
+          method: "POST",
+          body: formData
+        },
+        { context: "upload", timeoutMs: 25_000 }
+      );
+      toast.success(MESSAGES.admin.imageUploaded);
+      await loadProducts();
+    } catch (caught) {
+      const message = (caught as Error).message ?? "Upload failed. Check file size and try again.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setUploadingImage(false);
+    }
   }
+
+  const columns = useMemo<Array<TableColumn<ProductRow>>>(
+    () => [
+      {
+        key: "thumbnail",
+        header: "",
+        className: "w-16",
+        render: (row) => (
+          <div className="relative h-10 w-10 overflow-hidden rounded-md border border-border">
+            {row.thumbnail_url ? (
+              <Image src={row.thumbnail_url} alt={row.name} fill className="object-cover" />
+            ) : (
+              <div className="h-full w-full bg-secondary" />
+            )}
+          </div>
+        )
+      },
+      {
+        key: "name",
+        header: "Name",
+        render: (row) => (
+          <div>
+            <p className="font-semibold text-primary">{row.name}</p>
+            <p className="text-xs text-muted-foreground">{row.slug}</p>
+          </div>
+        )
+      },
+      {
+        key: "category",
+        header: "Category",
+        hideOnMobile: true,
+        render: (row) => row.category_name
+      },
+      {
+        key: "price",
+        header: "Price",
+        className: "whitespace-nowrap",
+        render: (row) => formatCurrency(row.base_price)
+      },
+      {
+        key: "active",
+        header: "Active",
+        hideOnMobile: true,
+        render: (row) => (
+          <Badge
+            className={row.active ? "bg-green-700/15 text-green-700" : "bg-secondary text-muted-foreground"}
+          >
+            {row.active ? "Active" : "Inactive"}
+          </Badge>
+        )
+      },
+      {
+        key: "stock",
+        header: "In stock",
+        hideOnMobile: true,
+        render: (row) => (
+          <Badge
+            className={row.in_stock ? "bg-green-700/15 text-green-700" : "bg-secondary text-muted-foreground"}
+          >
+            {row.in_stock ? "In stock" : "Out"}
+          </Badge>
+        )
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        className: "text-right",
+        render: (row) => (
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => openEditDrawer(row)}
+              aria-label={`Edit ${row.name}`}
+            >
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setEditing(row);
+                setDrawerOpen(true);
+                form.reset({
+                  name: row.name,
+                  slug: row.slug,
+                  description: row.description,
+                  basePriceNaira: formatKoboToNaira(row.base_price),
+                  categoryId: row.category_id,
+                  active: row.active,
+                  inStock: row.in_stock
+                });
+                window.setTimeout(() => fileInputRef.current?.click(), 100);
+              }}
+              aria-label={`Upload image for ${row.name}`}
+            >
+              <Upload className="h-4 w-4" aria-hidden="true" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDeleteTarget(row)}
+              aria-label={`Delete ${row.name}`}
+            >
+              <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+            </Button>
+          </div>
+        )
+      }
+    ],
+    [form, openEditDrawer]
+  );
 
   return (
-    <div className="space-y-6">
-      <form
-        className="premium-card grid gap-3 p-4 md:grid-cols-2"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          setError(null);
-          setBusyKey("create");
-
-          try {
-            const response = await fetch("/api/admin/products", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                ...form,
-                base_price: parseNairaToKobo(form.base_price || "0")
-              })
-            });
-
-            const payload = (await response.json()) as { error?: string };
-            if (!response.ok) {
-              setError(payload.error ?? "Unable to create product");
-              return;
-            }
-
-            setForm({
-              name: "",
-              slug: "",
-              description: "",
-              base_price: DEFAULT_NAIRA_INPUT,
-              active: true,
-              in_stock: true,
-              category_id: defaultCategory
-            });
-            await load();
-            toast.success(MESSAGES.admin.productCreated);
-          } catch (caught) {
-            setError(caught instanceof Error ? caught.message : "Unable to create product");
-          } finally {
-            setBusyKey(null);
-          }
-        }}
-      >
-        <Input
-          placeholder="Name"
-          value={form.name}
-          onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-          disabled={busyKey === "create"}
-          required
-        />
-        <Input
-          placeholder="Slug"
-          value={form.slug}
-          onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
-          disabled={busyKey === "create"}
-          required
-        />
-        <Input
-          placeholder="Description"
-          value={form.description}
-          onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-          disabled={busyKey === "create"}
-          required
-        />
-        <Input
-          placeholder="Base price (NGN)"
-          type="text"
-          inputMode="decimal"
-          value={form.base_price}
-          onChange={(event) => {
-            const sanitized = sanitizeMoneyInput(event.target.value);
-            setForm((current) => ({ ...current, base_price: sanitized }));
-          }}
-          disabled={busyKey === "create"}
-          required
-        />
-        <Select
-          value={form.category_id}
-          onChange={(event) => setForm((current) => ({ ...current, category_id: event.target.value }))}
-          disabled={busyKey === "create"}
-          required
-        >
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </Select>
-        <div className="flex flex-wrap gap-4">
-          <div className="flex items-center gap-2 text-xs">
-            <Switch
-              checked={form.active}
-              onCheckedChange={(checked) => setForm((current) => ({ ...current, active: checked }))}
-              aria-label="Toggle active state for new product"
-              disabled={busyKey === "create"}
-            />
-            <span>Active</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <Switch
-              checked={form.in_stock}
-              onCheckedChange={(checked) =>
-                setForm((current) => ({ ...current, in_stock: checked }))
-              }
-              aria-label="Toggle stock state for new product"
-              disabled={busyKey === "create"}
-            />
-            <span>In stock</span>
-          </div>
-        </div>
-        <div className="md:col-span-2">
-          <Button type="submit" disabled={busyKey === "create"}>
-            {busyKey === "create" ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                Creating...
-              </span>
-            ) : (
-              "Create product"
-            )}
+    <>
+      <AdminPageShell
+        title="Products"
+        subtitle="Manage your catalog with quick search, filters, and drawer editing."
+        actions={
+          <Button onClick={openCreateDrawer}>
+            <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+            Add Product
           </Button>
+        }
+        toolbar={
+          <div className="grid gap-2 md:grid-cols-5">
+            <Input
+              placeholder="Search by name or slug"
+              value={query.searchInput}
+              onChange={(event) => query.setSearchInput(event.target.value)}
+            />
+            <Select
+              value={categoryFilter || "all"}
+              onChange={(event) =>
+                query.setFilter(
+                  "categoryId",
+                  event.target.value === "all" ? null : event.target.value
+                )
+              }
+            >
+              <option value="all">All categories</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={activeFilter || "all"}
+              onChange={(event) =>
+                query.setFilter("active", event.target.value === "all" ? null : event.target.value)
+              }
+            >
+              <option value="all">All active states</option>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </Select>
+            <Select
+              value={stockFilter || "all"}
+              onChange={(event) =>
+                query.setFilter("inStock", event.target.value === "all" ? null : event.target.value)
+              }
+            >
+              <option value="all">All stock states</option>
+              <option value="true">In stock</option>
+              <option value="false">Out of stock</option>
+            </Select>
+            <Select value={query.sort || "newest"} onChange={(event) => query.setSort(event.target.value)}>
+              <option value="newest">Newest</option>
+              <option value="price_asc">Price low-high</option>
+              <option value="price_desc">Price high-low</option>
+              <option value="name_asc">Name A-Z</option>
+              <option value="name_desc">Name Z-A</option>
+            </Select>
+          </div>
+        }
+      >
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+          <p>
+            Showing {meta.from}-{meta.to} of {meta.total}
+          </p>
+          <div className="flex items-center gap-2">
+            <label htmlFor="toolbarPageSize" className="text-xs">
+              Rows
+            </label>
+            <Select
+              id="toolbarPageSize"
+              value={String(query.pageSize)}
+              onChange={(event) => query.setPageSize(Number.parseInt(event.target.value, 10))}
+            >
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </Select>
+          </div>
         </div>
-      </form>
 
-      {error ? <InlineNotice type="error" title={error} /> : null}
+        {error ? (
+          <div className="mb-3">
+            <InlineNotice type="error" title={error} />
+          </div>
+        ) : null}
 
-      <div className="space-y-3">
-        {productRows.map((product) => (
-          <article key={product.id} className="premium-card space-y-3 p-4">
-            <div className="grid gap-2 md:grid-cols-2">
+        <AdminDataTable
+          columns={columns}
+          items={rows}
+          loading={loading}
+          rowKey={(row) => row.id}
+          page={meta.page}
+          pageSize={meta.pageSize}
+          total={meta.total}
+          totalPages={meta.totalPages}
+          from={meta.from}
+          to={meta.to}
+          onPageChange={query.setPage}
+          onPageSizeChange={query.setPageSize}
+          emptyTitle="No products yet"
+          emptyDescription="Create your first product to start selling."
+        />
+      </AdminPageShell>
+
+      <DrawerFormShell
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={editing ? "Edit Product" : "Add Product"}
+        description="Use this form to create or update product details."
+      >
+        <form
+          className="space-y-4"
+          onSubmit={form.handleSubmit(onSubmit)}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              {...form.register("name")}
+              onChange={(event) => {
+                form.setValue("name", event.target.value, { shouldValidate: true });
+                if (!editing) {
+                  form.setValue("slug", slugify(event.target.value), { shouldValidate: true });
+                }
+              }}
+            />
+            {form.formState.errors.name ? (
+              <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="slug">Slug</Label>
+            <Input id="slug" {...form.register("slug")} />
+            {form.formState.errors.slug ? (
+              <p className="text-xs text-destructive">{form.formState.errors.slug.message}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea id="description" rows={4} {...form.register("description")} />
+            {form.formState.errors.description ? (
+              <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="price">Price (NGN)</Label>
               <Input
-                value={product.name}
-                disabled={isRowBusy(product.id)}
+                id="price"
+                value={form.watch("basePriceNaira")}
                 onChange={(event) =>
-                  setProducts((rows) =>
-                    rows.map((row) =>
-                      row.id === product.id ? { ...row, name: event.target.value } : row
-                    )
-                  )
+                  form.setValue("basePriceNaira", sanitizeMoneyInput(event.target.value), {
+                    shouldValidate: true
+                  })
                 }
               />
-              <Input
-                value={product.slug}
-                disabled={isRowBusy(product.id)}
-                onChange={(event) =>
-                  setProducts((rows) =>
-                    rows.map((row) =>
-                      row.id === product.id ? { ...row, slug: event.target.value } : row
-                    )
-                  )
-                }
-              />
-              <Input
-                value={product.description}
-                disabled={isRowBusy(product.id)}
-                onChange={(event) =>
-                  setProducts((rows) =>
-                    rows.map((row) =>
-                      row.id === product.id ? { ...row, description: event.target.value } : row
-                    )
-                  )
-                }
-              />
-              <Input
-                type="text"
-                inputMode="decimal"
-                value={priceDrafts[product.id] ?? formatKoboToNaira(product.base_price)}
-                disabled={isRowBusy(product.id)}
-                onChange={(event) => setProductPriceDraft(product.id, event.target.value)}
-              />
-              <Select
-                value={product.category_id}
-                disabled={isRowBusy(product.id)}
-                onChange={(event) =>
-                  setProducts((rows) =>
-                    rows.map((row) =>
-                      row.id === product.id ? { ...row, category_id: event.target.value } : row
-                    )
-                  )
-                }
-              >
+              {form.formState.errors.basePriceNaira ? (
+                <p className="text-xs text-destructive">{form.formState.errors.basePriceNaira.message}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Select id="category" {...form.register("categoryId")}>
+                <option value="">Select category</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
                 ))}
               </Select>
-              <div className="flex flex-wrap gap-4 text-xs">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={product.active}
-                    disabled={isRowBusy(product.id)}
-                    onCheckedChange={(checked) =>
-                      setProducts((rows) =>
-                        rows.map((row) =>
-                          row.id === product.id ? { ...row, active: checked } : row
-                        )
-                      )
-                    }
-                    aria-label={`Toggle active state for ${product.name}`}
-                  />
-                  <span>Active</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={product.in_stock}
-                    disabled={isRowBusy(product.id)}
-                    onCheckedChange={(checked) =>
-                      setProducts((rows) =>
-                        rows.map((row) =>
-                          row.id === product.id ? { ...row, in_stock: checked } : row
-                        )
-                      )
-                    }
-                    aria-label={`Toggle stock state for ${product.name}`}
-                  />
-                  <span>In stock</span>
-                </div>
-              </div>
+              {form.formState.errors.categoryId ? (
+                <p className="text-xs text-destructive">{form.formState.errors.categoryId.message}</p>
+              ) : null}
             </div>
+          </div>
 
-            <div className="flex flex-wrap gap-2">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <Switch
+                checked={form.watch("active")}
+                onCheckedChange={(checked) => form.setValue("active", checked)}
+                aria-label="Toggle active status"
+              />
+              Active
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <Switch
+                checked={form.watch("inStock")}
+                onCheckedChange={(checked) => form.setValue("inStock", checked)}
+                aria-label="Toggle stock status"
+              />
+              In stock
+            </label>
+          </div>
+
+          <div className="rounded-lg border border-border p-3">
+            <p className="text-sm font-semibold text-primary">Product image</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Upload one image at a time. The first image appears as the product thumbnail.
+            </p>
+            <div className="mt-3 flex items-center gap-3">
+              {editing?.thumbnail_url ? (
+                <div className="relative h-14 w-14 overflow-hidden rounded-md border border-border">
+                  <Image src={editing.thumbnail_url} alt={editing.name} fill className="object-cover" />
+                </div>
+              ) : (
+                <div className="h-14 w-14 rounded-md border border-dashed border-border bg-secondary/50" />
+              )}
               <Button
-                disabled={isRowBusy(product.id)}
-                onClick={async () => {
-                  setError(null);
-                  setBusyKey(`save:${product.id}`);
-                  try {
-                    const response = await fetch("/api/admin/products", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(product)
-                    });
-                    const payload = (await response.json()) as { error?: string };
-                    if (!response.ok) {
-                      setError(payload.error ?? "Unable to update product");
-                      return;
-                    }
-                    await load();
-                    toast.success(MESSAGES.admin.productUpdated);
-                  } catch (caught) {
-                    setError(caught instanceof Error ? caught.message : "Unable to update product");
-                  } finally {
-                    setBusyKey(null);
-                  }
-                }}
-              >
-                {busyKey === `save:${product.id}` ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    Saving...
-                  </span>
-                ) : (
-                  "Save"
-                )}
-              </Button>
-              <Button
+                type="button"
                 variant="outline"
-                disabled={isRowBusy(product.id)}
-                onClick={async () => {
-                  setError(null);
-                  setBusyKey(`upload:${product.id}`);
-                  const fileInput = document.createElement("input");
-                  fileInput.type = "file";
-                  fileInput.accept = "image/*";
-                  fileInput.onchange = async () => {
-                    const file = fileInput.files?.[0];
-                    if (!file) {
-                      setBusyKey(null);
-                      return;
-                    }
-
-                    const data = new FormData();
-                    data.append("file", file);
-                    data.append("productId", product.id);
-
-                    try {
-                      const uploadResponse = await fetch("/api/admin/products/upload", {
-                        method: "POST",
-                        body: data
-                      });
-                      const uploadPayload = (await uploadResponse.json()) as { error?: string };
-                      if (!uploadResponse.ok) {
-                        setError(uploadPayload.error ?? "Unable to upload image");
-                      } else {
-                        toast.success(MESSAGES.admin.imageUploaded);
-                      }
-                    } catch (caught) {
-                      setError(caught instanceof Error ? caught.message : "Unable to upload image");
-                    } finally {
-                      setBusyKey(null);
-                    }
-                  };
-                  fileInput.click();
-                }}
+                disabled={!editing || uploadingImage}
+                onClick={() => fileInputRef.current?.click()}
               >
-                {busyKey === `upload:${product.id}` ? (
+                {uploadingImage ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Uploading...
                   </span>
                 ) : (
                   "Upload image"
                 )}
               </Button>
-              <Button
-                variant="destructive"
-                disabled={isRowBusy(product.id)}
-                onClick={async () => {
-                  setError(null);
-                  setBusyKey(`delete:${product.id}`);
-                  try {
-                    const response = await fetch("/api/admin/products", {
-                      method: "DELETE",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ id: product.id })
-                    });
-                    const payload = (await response.json()) as { error?: string };
-                    if (!response.ok) {
-                      setError(payload.error ?? "Unable to delete product");
-                      return;
-                    }
-                    await load();
-                    toast.success(MESSAGES.admin.productDeleted);
-                  } catch (caught) {
-                    setError(caught instanceof Error ? caught.message : "Unable to delete product");
-                  } finally {
-                    setBusyKey(null);
-                  }
-                }}
-              >
-                {busyKey === `delete:${product.id}` ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    Deleting...
-                  </span>
-                ) : (
-                  "Delete"
-                )}
-              </Button>
             </div>
-          </article>
-        ))}
-      </div>
-    </div>
+            {!editing ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Save the product first, then upload images.
+              </p>
+            ) : null}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file || !editing) {
+                  return;
+                }
+                uploadImage(editing.id, file).catch(() => undefined);
+                event.currentTarget.value = "";
+              }}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setDrawerOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </span>
+              ) : (
+                "Save changes"
+              )}
+            </Button>
+          </div>
+        </form>
+      </DrawerFormShell>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete this product?"
+        description="Delete this product? This cannot be undone."
+        confirmLabel={deleting ? "Deleting..." : "Delete"}
+        destructive
+        busy={deleting}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          handleDelete().catch(() => undefined);
+        }}
+      />
+    </>
   );
 }
