@@ -83,6 +83,12 @@ Required minimum for local app startup:
 - `AUTH_PROVIDER`
 - `ADMIN_EMAILS`
 
+Connection pool tuning (important for Vercel/serverless):
+- `DB_POOL_MAX` (recommended `1` on Vercel)
+- `DB_POOL_IDLE_TIMEOUT_MS` (recommended `5000` on Vercel)
+- `DB_POOL_CONNECTION_TIMEOUT_MS` (recommended `10000`)
+- `DB_POOL_MAX_USES` (recommended `7500`)
+
 Backoffice bootstrap/invite vars:
 - `SUPERADMIN_EMAIL` (recommended)
 - `SUPERADMIN_INITIAL_PASSWORD` (for NextAuth bootstrap)
@@ -225,6 +231,11 @@ Compatibility rollout:
 - Orders/payments are stored in app DB independent of auth provider DB features.
 - Keep secrets in env vars only.
 - Configure secure webhook secrets in production.
+- If you are using Supabase pooling on Vercel, use the **transaction pooler URL** (port `6543`), not session mode (`5432`).
+- For Vercel + Supabase, set:
+  - `DB_POOL_MAX=1`
+  - `DB_POOL_IDLE_TIMEOUT_MS=5000`
+  - `DB_POOL_CONNECTION_TIMEOUT_MS=10000`
 
 ## QA Checklist
 - Guest checkout succeeds without login

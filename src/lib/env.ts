@@ -8,6 +8,10 @@ const optionalEmail = z.preprocess(
 const serverEnvSchema = z.object({
   APP_BASE_URL: z.string().url().default("http://localhost:3000"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  DB_POOL_MAX: z.coerce.number().int().positive().optional(),
+  DB_POOL_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  DB_POOL_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  DB_POOL_MAX_USES: z.coerce.number().int().positive().optional(),
   AUTH_PROVIDER: z.enum(["supabase", "nextauth"]).default("supabase"),
   ADMIN_EMAILS: z.string().default(""),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
